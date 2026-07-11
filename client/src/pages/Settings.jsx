@@ -664,10 +664,15 @@ function AboutPanel() {
     setChecking(true);
     setResult(null);
     try {
-      const res = await fetch('https://api.github.com/repos/charliemansell/havoro/releases/latest');
+      // /releases/latest excludes pre-releases and drafts by design — Havoro
+      // ships quiet pre-releases while code signing is pending, so that
+      // endpoint would 404 forever. /releases (the list endpoint) returns
+      // everything, newest first, regardless of pre-release status.
+      const res = await fetch('https://api.github.com/repos/charliemansell/havoro/releases');
       if (!res.ok) throw new Error(`GitHub returned ${res.status}`);
-      const data = await res.json();
-      const latest = (data.tag_name || '').replace(/^v/, '');
+      const releases = await res.json();
+      const data = releases.find(r => !r.draft);
+      const latest = (data?.tag_name || '').replace(/^v/, '');
       if (!latest) throw new Error('No releases found');
       setResult({ latest, updateAvailable: version ? isNewer(version, latest) : false });
     } catch (e) {
