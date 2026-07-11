@@ -79,7 +79,17 @@
       transition: background 0.15s; flex-shrink: 0;
     }
     .nav-cta:hover { background: var(--green-tint); }
-    @media (max-width: 620px) { .nav-links { display: none; } }
+    .nav-support {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: transparent; color: var(--paper);
+      border: 1px solid rgba(250,249,244,0.35);
+      padding: 0.4rem 0.9rem; border-radius: 3px;
+      font-size: 0.82rem; font-weight: 700;
+      transition: background 0.15s, border-color 0.15s; flex-shrink: 0;
+      margin-right: 0.6rem;
+    }
+    .nav-support:hover { background: rgba(250,249,244,0.1); border-color: rgba(250,249,244,0.6); }
+    @media (max-width: 620px) { .nav-links { display: none; } .nav-support { display: none; } }
 
     /* ── HERO ───────────────────────────────────────────── */
     .hero {
@@ -370,6 +380,7 @@
       <li><a href="guide.html">Guide</a></li>
       <li><a href="https://github.com/charliemansell/havoro" target="_blank" rel="noopener">GitHub</a></li>
     </ul>
+    <a href="https://buymeacoffee.com/charliemansell" target="_blank" rel="noopener" class="nav-support">☕ Support</a>
     <a href="https://github.com/charliemansell/havoro/releases/latest" class="nav-cta" id="nav-download">Download</a>
   </div>
 </nav>
@@ -716,10 +727,16 @@
     return (assets || []).find(function (a) { return pattern.test(a.name); });
   }
 
-  fetch('https://api.github.com/repos/charliemansell/havoro/releases/latest')
+  // /releases/latest excludes pre-releases and drafts by design — this app
+  // ships quiet pre-releases while code signing is pending, so it'd never
+  // match anything. /releases (the list endpoint) returns everything,
+  // newest first, regardless of pre-release status.
+  fetch('https://api.github.com/repos/charliemansell/havoro/releases')
     .then(function (res) { if (!res.ok) throw new Error('bad response'); return res.json(); })
     .then(function (data) {
-      var asset = pickAsset(data.assets);
+      var latest = (data || []).find(function (r) { return !r.draft; });
+      if (!latest) return;
+      var asset = pickAsset(latest.assets);
       if (!asset) return;
       var label = 'Download for ' + (platform === 'win' ? 'Windows' : 'Linux');
       ['hero-download', 'install-download'].forEach(function (id) {
