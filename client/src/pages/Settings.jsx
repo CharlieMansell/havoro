@@ -105,6 +105,7 @@ function CheckInPanel({ toast }) {
 }
 
 function BackupPanel({ toast, confirm, isAdmin }) {
+  const { isElectron } = useAuth();
   const [backups, setBackups] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [running, setRunning] = useState(false);
@@ -124,12 +125,16 @@ function BackupPanel({ toast, confirm, isAdmin }) {
 
   useEffect(() => {
     loadBackups();
-    if (isAdmin) {
+    // A fixed clock time is a server-mode concept — desktop backs up once
+    // per day on launch instead (see backupScheduler.js), since a cron only
+    // fires if the app happens to be open at that exact moment, which for a
+    // normal desktop app usage pattern may rarely or never actually happen.
+    if (isAdmin && !isElectron) {
       api.get('/settings/backup-schedule')
         .then(r => setSchedule(cronToTime(r.cron)))
         .catch(console.error);
     }
-  }, [isAdmin]);
+  }, [isAdmin, isElectron]);
 
   const runNow = async () => {
     setRunning(true);
@@ -224,8 +229,8 @@ function BackupPanel({ toast, confirm, isAdmin }) {
         </div>
       </div>
 
-      {/* Schedule (admin only) */}
-      {isAdmin && (
+      {/* Schedule (admin only, server mode only — see the effect above) */}
+      {isAdmin && !isElectron && (
         <div className="flex items-center gap-3 flex-wrap">
           <label className="text-sm text-slate-600 dark:text-slate-300 shrink-0">Daily backup at</label>
           <input

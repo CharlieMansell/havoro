@@ -82,9 +82,24 @@ app.use('/api/transfers',    require('./routes/transfers'));
 // Serve built client in production
 if (process.env.NODE_ENV === 'production') {
   const clientDist = process.env.CLIENT_DIST || path.join(__dirname, '../client/dist');
-  app.use(express.static(clientDist));
+  // index: false — otherwise express.static serves index.html itself for
+  // any directory-style request (including "/"), with its own default
+  // caching, before the no-store route below ever runs.
+  app.use(express.static(clientDist, { index: false }));
   app.get('*', (req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
+    // Electron's disk cache lives in userData and survives app upgrades by
+    // design (that's what keeps your data safe) — but without this, a
+    // cached copy of the app shell (including whatever CSP/security headers
+    // were attached at the time) can get stuck indefinitely across version
+    // upgrades, since nothing tells the browser the old one is invalid. The
+    // hashed JS/CSS asset files under express.static above are unaffected
+    // and stay cacheable — their filenames change whenever their content
+    // does, so there's nothing to go stale there.
+    // cacheControl: false stops sendFile from setting its own Cache-Control
+    // (public, max-age=0 by default), which would otherwise silently
+    // override the header set here.
+    res.set('Cache-Control', 'no-store');
+    res.sendFile(path.join(clientDist, 'index.html'), { cacheControl: false });
   });
 }
 

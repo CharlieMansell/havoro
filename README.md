@@ -38,7 +38,7 @@ The desktop app is the primary, supported way to run Havoro. A Docker image is a
 - **Assets** — Share portfolio holdings with live price fetching, property valuations, balance projections
 - **Check-ins** — Snapshot all account balances at a point in time to build a net-worth history
 - **CSV Import** — ANZ, NAB, Westpac, CommBank profiles included; easy to add more
-- **Backups** — Nightly automated backups, 30-day retention, one-click restore from Settings
+- **Backups** — Back up with one click from Settings any time, restore from a backup file just as easily, last 30 days kept automatically
 - **Multi-user** — Admin and member roles, per-user passwords
 - **PWA** — Installable on iOS/Android, auto-updates when you open the app
 
