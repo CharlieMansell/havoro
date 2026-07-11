@@ -34,6 +34,11 @@
     .nav-right a:hover { color: var(--paper); text-decoration: none; }
     .nav-cta { background: var(--paper); color: var(--ink) !important; padding: 0.35rem 0.8rem; border-radius: 3px; font-weight: 700; }
     .nav-cta:hover { background: var(--green-tint); }
+    .nav-support {
+      color: var(--paper) !important; border: 1px solid rgba(250,249,244,0.35);
+      padding: 0.35rem 0.8rem; border-radius: 3px; font-weight: 700;
+    }
+    .nav-support:hover { background: rgba(250,249,244,0.1); border-color: rgba(250,249,244,0.6); text-decoration: none; }
     @media (max-width: 540px) {
       .nav-right a:not(.nav-cta) { display: none; }
     }
@@ -97,7 +102,8 @@
     <div class="nav-right">
       <a href="index.html#features">Features</a>
       <a href="index.html#install">Install</a>
-      <a class="nav-cta" href="https://github.com/charliemansell/havoro/releases/latest">Download</a>
+      <a class="nav-support" href="https://buymeacoffee.com/charliemansell" target="_blank" rel="noopener">☕ Support this project</a>
+      <a class="nav-cta" id="nav-download" href="https://github.com/charliemansell/havoro/releases/latest">Download</a>
     </div>
   </div>
 </nav>
@@ -251,8 +257,40 @@
 </main>
 
 <footer class="footer">
-  <p><a href="index.html">← Back to homepage</a> · <a href="https://github.com/charliemansell/havoro/releases/latest">Download Havoro</a> · <a href="privacy.html">Privacy</a></p>
+  <p><a href="index.html">← Back to homepage</a> · <a href="https://github.com/charliemansell/havoro/releases/latest" id="footer-download">Download Havoro</a> · <a href="privacy.html">Privacy</a></p>
 </footer>
+
+<!-- Same progressive enhancement as index.html: point the download links
+     straight at the matching installer instead of the Releases page. Falls
+     back to the links above untouched if anything goes wrong. -->
+<script>
+(function () {
+  var ua = navigator.userAgent;
+  var platform = /Windows/i.test(ua) ? 'win'
+    : (/Linux/i.test(ua) && !/Android/i.test(ua)) ? 'linux'
+    : null;
+  if (!platform) return;
+
+  function pickAsset(assets) {
+    var pattern = platform === 'win' ? /\.exe$/i : /\.AppImage$/i;
+    return (assets || []).find(function (a) { return pattern.test(a.name); });
+  }
+
+  fetch('https://api.github.com/repos/charliemansell/havoro/releases')
+    .then(function (res) { if (!res.ok) throw new Error('bad response'); return res.json(); })
+    .then(function (data) {
+      var latest = (data || []).find(function (r) { return !r.draft; });
+      if (!latest) return;
+      var asset = pickAsset(latest.assets);
+      if (!asset) return;
+      ['nav-download', 'footer-download'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.href = asset.browser_download_url;
+      });
+    })
+    .catch(function () { /* leave the default Releases-page links in place */ });
+})();
+</script>
 
 </body>
 </html>
