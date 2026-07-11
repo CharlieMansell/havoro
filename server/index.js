@@ -31,7 +31,9 @@ app.use(helmet({
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"], // inline style="" attrs used for dynamic category colors
       imgSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'"],
+      // The one legitimate cross-origin call the app makes: Settings' "Check
+      // for updates" queries GitHub's API directly from the renderer.
+      connectSrc: ["'self'", 'https://api.github.com'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       frameAncestors: ["'none'"],
