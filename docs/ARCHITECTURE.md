@@ -49,7 +49,7 @@ flowchart TB
         EM["Electron main process<br/>single-instance lock · tray icon"]
         ES["Server child process<br/>spawned with ELECTRON_RUN_AS_NODE=1"]
         EW["BrowserWindow<br/>loads http://localhost:PORT"]
-        ED[("SQLite in user data dir<br/>+ nightly backups")]
+        ED[("SQLite in user data dir<br/>+ backup once per day on launch")]
         EM -->|spawns| ES
         EM -->|creates| EW
         EW -->|HTTP| ES
@@ -73,6 +73,8 @@ flowchart TB
 
 The Electron wrapper is deliberately thin: it spawns the same server as a child process (with `ELECTRON_RUN_AS_NODE=1` so the Electron binary behaves as plain Node.js), waits for `/api/health`, then opens a window pointed at localhost. All app logic lives in the server and SPA, so the desktop and self-hosted experiences can't drift apart.
 
+The one exception is `electron/preload.js` — a small `contextBridge` boundary (`nodeIntegration: false`, `contextIsolation: true` throughout) that exposes exactly two things to the renderer: downloading an update installer with progress, and handing the downloaded file to the OS to run. Everything else the renderer needs comes from the same HTTP API as self-hosted mode.
+
 ## Database schema
 
 ```mermaid
@@ -80,8 +82,9 @@ erDiagram
     users {
         int id PK
         text email UK
-        text password_hash
+        text password_hash "random, unused on desktop — no password there"
         int is_admin
+        text theme "light/dark/system"
     }
 
     accounts {

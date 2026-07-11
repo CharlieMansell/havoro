@@ -113,6 +113,8 @@ This is a personal/hobby project. If you find a security issue, please open a pr
 
 ## Hardening checklist
 
+This checklist is for **self-hosted/Docker deployments**. The desktop app generates its own random secret and has no password at all — there's a first-run wizard that just asks for your first name, and every later launch signs you back in silently, since it's a single local account with no network exposure to defend against. That's a deliberate tradeoff: it only works because the server binds to `127.0.0.1` only in desktop mode, so there's genuinely nothing else on the network able to reach it in the first place.
+
 - [ ] `JWT_SECRET` is a long random string (48+ bytes of hex), not the example placeholder — the server refuses to start otherwise
 - [ ] Used a strong password when creating the admin account on first launch (there is no default account or password to leave unchanged)
 - [ ] `COOKIE_SECURE=true` if running behind HTTPS

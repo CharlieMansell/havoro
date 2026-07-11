@@ -17,6 +17,7 @@ The GitHub Actions release workflow automatically builds a Windows installer eve
 2. Download `Havoro Setup x.x.x.exe` from the latest release
 3. Run the installer — Windows may show a **SmartScreen** warning ("Windows protected your PC") because the app isn't commercially code-signed. Click **More info → Run anyway** to proceed. This is normal for open-source software distributed outside the Microsoft Store.
 4. Launch Havoro; the app opens in a window and also appears in the system tray
+5. First launch asks for your first name (nothing else — no password, no email) and greets you by it from then on. Later launches sign you back in automatically.
 
 **Your data is stored at:** `%APPDATA%\Havoro\` — it survives updates and uninstalls.
 
@@ -28,7 +29,7 @@ The GitHub Actions release workflow automatically builds a Windows installer eve
 
 ### Updating
 
-Download and run the latest installer from the Releases page — it upgrades in place without touching your data.
+Settings → About → **Check for updates** finds new releases automatically, and can download and install the update for you — click **Download & install**, then **Restart & install** once it's downloaded. Your data is untouched either way. You can still grab and run the installer manually from the Releases page instead if you'd rather.
 
 ---
 
@@ -97,4 +98,4 @@ ports:
 
 ## Building locally (contributors only)
 
-If you're contributing to Havoro and need to build the Electron app yourself rather than waiting for a CI release, see the `electron/` folder — it contains a `package.json` with `build:win`, `build:mac`, and `build:linux` scripts. You'll need Node.js 20 and Windows Build Tools (Visual Studio C++ workload) to compile the native SQLite module.
+If you're contributing to Havoro and need to build the Electron app yourself rather than waiting for a CI release, see the `electron/` folder — it contains a `package.json` with `build:win` and `build:linux` scripts (there's no macOS build). You'll need Node.js 20 and Windows Build Tools (Visual Studio C++ workload) to compile the native SQLite module.

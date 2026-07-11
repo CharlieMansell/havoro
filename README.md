@@ -39,8 +39,10 @@ The desktop app is the primary, supported way to run Havoro. A Docker image is a
 - **Check-ins** — Snapshot all account balances at a point in time to build a net-worth history
 - **CSV Import** — ANZ, NAB, Westpac, CommBank profiles included; easy to add more
 - **Backups** — Back up with one click from Settings any time, restore from a backup file just as easily, last 30 days kept automatically
-- **Multi-user** — Admin and member roles, per-user passwords
-- **PWA** — Installable on iOS/Android, auto-updates when you open the app
+- **Theme** — Light, dark, or system, saved per account
+- **Check for updates** — On desktop, downloads and installs an available update without leaving the app
+- **Multi-user** *(self-hosted only)* — Admin and member roles, per-user passwords — desktop is a single local account with no password at all
+- **PWA** *(self-hosted only)* — Installable on iOS/Android, auto-updates when you open the app
 
 ---
 
@@ -70,6 +72,8 @@ The desktop app is the primary, supported way to run Havoro. A Docker image is a
 ---
 
 ## Environment variables
+
+These are for self-hosted/Docker deployments — the desktop app doesn't use any of them (it generates its own secret, and backs up once per day on launch rather than on a schedule).
 
 | Variable | Default | Description |
 |---|---|---|

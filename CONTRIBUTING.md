@@ -82,8 +82,9 @@ havoro/
 │   └── middleware/
 │       └── auth.js     # JWT verification
 │
-└── electron/           # Desktop app wrapper (builds .exe/.dmg/.AppImage)
+└── electron/           # Desktop app wrapper (builds .exe/.AppImage — no macOS build)
     ├── main.js         # Electron entry point
+    ├── preload.js      # contextBridge: exposes just the update download/install API
     └── electron-builder.yml
 ```
 

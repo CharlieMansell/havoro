@@ -444,9 +444,10 @@ All endpoints are prefixed `/api/`. Authentication is via an httpOnly cookie set
 | PUT | `/api/settings` | Admin | Upsert settings. |
 | POST | `/api/settings/backup` | Admin | Trigger manual backup. |
 | GET | `/api/settings/backups` | Admin | List available backup files. |
-| POST | `/api/settings/restore/:filename` | Admin | Restore database from backup. |
-| GET | `/api/settings/backup-schedule` | Admin | Get current backup cron schedule. |
-| PUT | `/api/settings/backup-schedule` | Admin | Update backup cron schedule. |
+| POST | `/api/settings/restore/:filename` | Admin | Restore database from one of this machine's own automatic backups. |
+| POST | `/api/settings/restore-upload` | Admin | Restore from an uploaded `.db` file (e.g. copied from another machine). Validates the SQLite file header and takes a safety backup of the current database first. |
+| GET | `/api/settings/backup-schedule` | Admin | Get current backup cron schedule. **Self-hosted only** — the desktop app has no configurable schedule; it backs up once per day on launch instead, since a fixed clock time only means something on an always-on server. |
+| PUT | `/api/settings/backup-schedule` | Admin | Update backup cron schedule. **Self-hosted only**, same reason. |
 
 ---
 

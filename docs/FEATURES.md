@@ -227,16 +227,25 @@ After import, any transaction that matches a categorisation rule is automaticall
 
 ## Settings
 
-Most settings are admin-only.
+Most settings are admin-only. A few sections only apply to one deployment mode — noted below.
+
+### Appearance
+
+Light, dark, or system theme. Saved to your account, so it follows you to any device you sign in on.
 
 ### Database backups
 
-- **Manual backup** — creates an immediate backup
-- **Scheduled backup** — configure the cron schedule (default: 2 AM daily)
+- **Manual backup** — creates an immediate backup, any time, one click
+- **Import a backup file** — restore from any `.db` file you pick from disk, not just this machine's own stored backups (e.g. one copied over from another computer). The file is checked before anything is touched, and the current database is backed up first as a safety net.
 - **Backup list** — see all stored backups with size and date
 - **Restore** — restores from any listed backup; the app restarts automatically
+- **Scheduled backup** *(self-hosted only)* — configure the cron schedule (default: 2 AM daily). The desktop app backs up once per day on launch instead — a fixed clock time only means something on an always-on server, so there's no schedule to configure there.
 
-Backups are SQLite `.db` files stored in the `backups/` folder on the host.
+Backups are SQLite `.db` files stored in the `backups/` folder (self-hosted) or `%APPDATA%\Havoro\backups` (desktop).
+
+### Check for updates
+
+Compares your version against the latest GitHub release. On desktop, an available update can be downloaded and installed without leaving the app — **Download & install** shows live progress, then **Restart & install** finishes it. Your data is untouched either way.
 
 ### Growth assumptions
 
@@ -264,13 +273,17 @@ Havoro is fully responsive and installable as a PWA (Progressive Web App). On iO
 
 ## Login
 
+**Desktop:** no login at all. First launch just asks for your first name, used for greetings like "Afternoon, Alex" on the dashboard — nothing else. Every later launch signs you back in automatically; there's no password to forget.
+
+**Self-hosted:** real accounts, since more than one person on the network could reach it. The first person to open it creates the admin account with a name, email, and password — there's no default account.
+
 ![Login](images/login.png)
 
 ---
 
 ## Users
 
-Admin-only. Create and manage users who can access the app.
+Self-hosted only — desktop has no multi-user concept, so there's no Users section there at all. Admin-only.
 
 - **Admin** — full access including Settings, Backups, User management
 - **Member** — full access to all financial data; cannot manage users or change system settings
@@ -281,9 +294,7 @@ Users cannot delete themselves or remove the last admin account.
 
 ## Profile
 
-Every user can:
-- Update their display name
-- Change their password (requires current password, minimum 8 characters)
+Every user can update their display name. Self-hosted users can also change their password (requires current password, minimum 8 characters) — not shown on desktop, since there's no password there to change.
 
 ---
 

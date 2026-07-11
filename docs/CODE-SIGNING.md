@@ -49,7 +49,7 @@ After signing is active, verify a downloaded installer on Windows:
 Or from a terminal:
 
 ```powershell
-Get-AuthenticodeSignature ".\Havoro Setup 1.1.0.exe" | Format-List
+Get-AuthenticodeSignature ".\Havoro Setup x.x.x.exe" | Format-List
 ```
 
 ## Privacy commitment
