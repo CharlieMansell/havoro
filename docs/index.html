@@ -370,7 +370,7 @@
       <li><a href="guide.html">Guide</a></li>
       <li><a href="https://github.com/charliemansell/havoro" target="_blank" rel="noopener">GitHub</a></li>
     </ul>
-    <a href="https://github.com/charliemansell/havoro/releases/latest" class="nav-cta">Download</a>
+    <a href="https://github.com/charliemansell/havoro/releases/latest" class="nav-cta" id="nav-download">Download</a>
   </div>
 </nav>
 
@@ -383,7 +383,7 @@
       Track every dollar without sharing a single one. Havoro is a personal finance tracker that runs entirely on your hardware. No bank logins, no cloud, no subscription.
     </p>
     <div class="hero-actions">
-      <a href="https://github.com/charliemansell/havoro/releases/latest" class="btn-primary">Download for Windows / Linux</a>
+      <a href="https://github.com/charliemansell/havoro/releases/latest" class="btn-primary" id="hero-download">Download for Windows / Linux</a>
       <a href="guide.html" class="btn-outline">See the user guide</a>
     </div>
     <div class="hero-trust">
@@ -632,7 +632,7 @@
             Havoro opens in a window and sits in the system tray
           </li>
         </ul>
-        <a href="https://github.com/charliemansell/havoro/releases/latest" class="btn-primary" style="width:100%;justify-content:center;">Download latest release</a>
+        <a href="https://github.com/charliemansell/havoro/releases/latest" class="btn-primary" style="width:100%;justify-content:center;" id="install-download">Download latest release</a>
       </div>
 
     </div>
@@ -656,8 +656,6 @@
     </div>
     <div class="oss-actions">
       <a href="https://github.com/charliemansell/havoro" class="btn-primary">View on GitHub</a>
-      <a href="https://github.com/charliemansell/havoro/blob/main/docs/ARCHITECTURE.md" class="btn-outline">Architecture</a>
-      <a href="https://github.com/charliemansell/havoro/blob/main/docs/SECURITY.md" class="btn-outline">Security model</a>
     </div>
     <p style="margin-top:2rem; font-size:0.9rem; color:#928e7d;">
       Havoro is free and always will be. If it saves you a subscription, you can
@@ -699,6 +697,43 @@
     </p>
   </div>
 </footer>
+
+<!-- Progressive enhancement: point the download buttons straight at the
+     matching installer for the visitor's OS instead of the Releases page.
+     Falls back to the Releases-page links above (untouched) if the API call
+     fails, is rate-limited, or the OS isn't Windows/Linux (e.g. macOS, which
+     isn't built) — never leaves a dead link. -->
+<script>
+(function () {
+  var ua = navigator.userAgent;
+  var platform = /Windows/i.test(ua) ? 'win'
+    : (/Linux/i.test(ua) && !/Android/i.test(ua)) ? 'linux'
+    : null;
+  if (!platform) return;
+
+  function pickAsset(assets) {
+    var pattern = platform === 'win' ? /\.exe$/i : /\.AppImage$/i;
+    return (assets || []).find(function (a) { return pattern.test(a.name); });
+  }
+
+  fetch('https://api.github.com/repos/charliemansell/havoro/releases/latest')
+    .then(function (res) { if (!res.ok) throw new Error('bad response'); return res.json(); })
+    .then(function (data) {
+      var asset = pickAsset(data.assets);
+      if (!asset) return;
+      var label = 'Download for ' + (platform === 'win' ? 'Windows' : 'Linux');
+      ['hero-download', 'install-download'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.href = asset.browser_download_url;
+        el.textContent = label;
+      });
+      var navEl = document.getElementById('nav-download');
+      if (navEl) navEl.href = asset.browser_download_url;
+    })
+    .catch(function () { /* leave the default Releases-page links in place */ });
+})();
+</script>
 
 </body>
 </html>
