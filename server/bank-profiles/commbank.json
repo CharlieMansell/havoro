@@ -1,0 +1,9 @@
+{
+  "name": "CommBank (CBA) — Everyday / Savings",
+  "account_match": "commbank",
+  "encoding": "utf-8",
+  "skip_rows": 1,
+  "date": { "column": 0, "format": "DD/MM/YYYY" },
+  "description": { "column": 2 },
+  "debit_credit": { "debit_column": 1, "credit_column": 3 }
+}

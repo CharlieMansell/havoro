@@ -1,0 +1,9 @@
+{
+  "name": "ANZ — Everyday / Savings",
+  "account_match": "anz",
+  "encoding": "utf-8",
+  "skip_rows": 1,
+  "date": { "column": 0, "format": "DD/MM/YYYY" },
+  "description": { "column": 2 },
+  "amount": { "column": 1, "negate": false }
+}

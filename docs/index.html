@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Havoro: personal finance that stays personal</title>
+  <meta name="description" content="A self-hosted personal finance tracker. Import bank transactions, set budgets, and track your net worth without connecting your bank or sharing data with anyone.">
+  <meta property="og:title" content="Havoro: personal finance that stays personal">
+  <meta property="og:description" content="Track every dollar without sharing a single one. Runs on your hardware. No bank logins. No subscriptions. Free and open source.">
+  <meta property="og:image" content="https://charliemansell.github.io/havoro/images/dashboard.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink:        #16160f;
+      --ink-soft:   #3d3b32;
+      --paper:      #faf9f4;
+      --paper-dim:  #f0ede4;
+      --line:       #ddd8ca;
+      --line-dark:  rgba(250,249,244,0.14);
+      --muted:      #7a7669;
+      --muted-2:    #9d9888;
+      --green:      #1f6b45;
+      --green-deep: #164f34;
+      --green-tint: #eef3ea;
+      --white:      #ffffff;
+      --serif:      Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+      --sans:       -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --mono:       ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Menlo, monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--paper);
+      color: var(--ink-soft);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+
+    /* ── NAV ────────────────────────────────────────────── */
+    .nav {
+      position: sticky; top: 0; z-index: 50;
+      background: var(--ink);
+      border-bottom: 1px solid var(--line-dark);
+      padding: 0 1.5rem;
+    }
+    .nav-inner {
+      max-width: 1080px; margin: 0 auto;
+      display: flex; align-items: center; gap: 1.5rem;
+      height: 56px;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 0.55rem;
+      font-family: var(--mono); font-weight: 600; font-size: 0.95rem; color: var(--paper);
+      flex-shrink: 0; letter-spacing: -0.01em;
+    }
+    .nav-logo svg { width: 22px; height: 22px; }
+    .nav-links {
+      display: flex; gap: 1.75rem; margin-left: auto;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--muted-2); font-size: 0.85rem;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--paper); }
+    .nav-cta {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: var(--paper); color: var(--ink);
+      padding: 0.4rem 0.9rem; border-radius: 3px;
+      font-size: 0.82rem; font-weight: 700;
+      transition: background 0.15s; flex-shrink: 0;
+    }
+    .nav-cta:hover { background: var(--green-tint); }
+    @media (max-width: 620px) { .nav-links { display: none; } }
+
+    /* ── HERO ───────────────────────────────────────────── */
+    .hero {
+      background: var(--ink);
+      padding: 4.5rem 1.5rem 0;
+    }
+    .hero-inner { max-width: 720px; margin: 0 auto; }
+    .hero-eyebrow {
+      font-family: var(--mono); font-size: 0.78rem; color: #7fae94;
+      letter-spacing: 0.02em; margin-bottom: 1.75rem;
+    }
+    .hero h1 {
+      font-family: var(--serif);
+      font-size: clamp(2.1rem, 5vw, 3.35rem);
+      font-weight: 400; line-height: 1.18;
+      color: var(--paper); letter-spacing: -0.01em;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 em { font-style: italic; color: #8fc4a6; }
+    .hero-sub {
+      font-size: clamp(1rem, 2vw, 1.15rem);
+      color: #b4b0a2; max-width: 560px;
+      margin-bottom: 2.25rem; line-height: 1.7;
+    }
+    .hero-actions {
+      display: flex; gap: 0.9rem; flex-wrap: wrap; margin-bottom: 2rem;
+    }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: var(--green); color: var(--white);
+      padding: 0.7rem 1.35rem; border-radius: 3px;
+      font-size: 0.9rem; font-weight: 700;
+      transition: background 0.15s;
+    }
+    .btn-primary:hover { background: var(--green-deep); }
+    .btn-outline {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: transparent;
+      border: 1px solid #4a4838;
+      color: #d8d4c4;
+      padding: 0.7rem 1.35rem; border-radius: 3px;
+      font-size: 0.9rem; font-weight: 600;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-outline:hover { border-color: #8fc4a6; color: var(--paper); }
+    .hero-trust {
+      display: flex; flex-wrap: wrap; row-gap: 0.5rem; column-gap: 1.5rem;
+      margin-bottom: 3rem;
+      font-family: var(--mono); font-size: 0.76rem; color: #6f6c5e;
+      border-top: 1px solid var(--line-dark); padding-top: 1.25rem;
+    }
+    .hero-screenshot {
+      max-width: 980px; margin: 0 auto;
+      border: 1px solid var(--line-dark);
+      border-bottom: none;
+      background: #0d0d09;
+    }
+    .hero-screenshot .chrome {
+      display: flex; align-items: center; gap: 0.4rem;
+      padding: 0.6rem 0.8rem;
+      border-bottom: 1px solid var(--line-dark);
+    }
+    .hero-screenshot .chrome span {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #3a3830;
+    }
+    .hero-screenshot img { width: 100%; display: block; }
+
+    /* ── SECTION WRAPPER ──────────────────────────────────── */
+    .section { padding: 5rem 1.5rem; border-top: 1px solid var(--line); }
+    .section-inner { max-width: 1080px; margin: 0 auto; }
+    .section-label {
+      font-family: var(--mono); font-size: 0.76rem; font-weight: 600;
+      color: var(--green); letter-spacing: 0.02em;
+      margin-bottom: 1rem;
+    }
+    .section-title {
+      font-family: var(--serif); font-weight: 400;
+      font-size: clamp(1.5rem, 3vw, 2.15rem);
+      letter-spacing: -0.01em;
+      line-height: 1.25; margin-bottom: 1rem; color: var(--ink);
+    }
+    .section-sub {
+      font-size: 1rem; color: var(--muted);
+      max-width: 560px; line-height: 1.7;
+    }
+
+    /* ── WHY SECTION ─────────────────────────────────────── */
+    .why-list { margin-top: 2.5rem; }
+    .why-row {
+      display: grid; grid-template-columns: 64px 1fr;
+      gap: 1.5rem; padding: 1.75rem 0;
+      border-top: 1px solid var(--line);
+    }
+    .why-row:last-child { border-bottom: 1px solid var(--line); }
+    .why-num {
+      font-family: var(--mono); font-size: 0.85rem; color: var(--muted-2);
+      padding-top: 0.15rem;
+    }
+    .why-row h3 {
+      font-size: 1.05rem; font-weight: 700;
+      color: var(--ink); margin-bottom: 0.4rem;
+    }
+    .why-row p { font-size: 0.92rem; color: var(--muted); line-height: 1.7; max-width: 640px; }
+
+    .founder-note {
+      margin-top: 3rem;
+      border-left: 2px solid var(--green);
+      padding: 0.25rem 0 0.25rem 1.5rem;
+    }
+    .founder-note p {
+      font-family: var(--serif);
+      font-size: 1.1rem; color: var(--ink-soft);
+      line-height: 1.75; max-width: 680px;
+    }
+    .founder-note .founder-sig {
+      margin-top: 1rem; font-family: var(--mono); font-size: 0.8rem;
+      font-weight: 600; color: var(--muted);
+    }
+
+    /* ── COMPARISON ──────────────────────────────────────── */
+    .compare-table { width: 100%; border-collapse: collapse; margin-top: 2rem; font-size: 0.88rem; }
+    .compare-table th {
+      padding: 0.7rem 1rem; text-align: left;
+      font-family: var(--mono); font-size: 0.72rem; font-weight: 600; color: var(--muted);
+      letter-spacing: 0.02em;
+      border-bottom: 1px solid var(--ink);
+    }
+    .compare-table th:nth-child(n+2) { text-align: center; }
+    .compare-table td { padding: 0.7rem 1rem; border-bottom: 1px solid var(--line); }
+    .compare-table td:nth-child(n+2) { text-align: center; font-family: var(--mono); font-size: 0.85rem; }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table td:first-child { color: var(--ink-soft); }
+    .hl-col { font-weight: 700; color: var(--green-deep); }
+    .cross { color: var(--muted-2); }
+    .compare-scroll { overflow-x: auto; }
+
+    /* ── FEATURES ─────────────────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+      gap: 0; margin-top: 2.5rem;
+      border-top: 1px solid var(--line);
+      border-left: 1px solid var(--line);
+    }
+    .feature-card {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 1.5rem;
+    }
+    .feature-card .num {
+      font-family: var(--mono); font-size: 0.72rem; color: var(--muted-2);
+      display: block; margin-bottom: 0.9rem;
+    }
+    .feature-card h3 {
+      font-size: 0.95rem; font-weight: 700;
+      color: var(--ink); margin-bottom: 0.45rem;
+    }
+    .feature-card p { font-size: 0.85rem; color: var(--muted); line-height: 1.65; }
+
+    /* ── SCREENSHOTS ─────────────────────────────────────── */
+    .screenshots { background: var(--ink); }
+    .screenshots .section-title { color: var(--paper); }
+    .screenshots .section-sub { color: #b4b0a2; }
+    .ss-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+      gap: 1.25rem; margin-top: 2.5rem;
+    }
+    .ss-item {
+      border: 1px solid var(--line-dark);
+    }
+    .ss-item img { width: 100%; }
+    .ss-label {
+      padding: 0.65rem 0.9rem;
+      border-top: 1px solid var(--line-dark);
+      font-family: var(--mono); font-size: 0.74rem; color: #928e7d;
+    }
+
+    /* ── INSTALL ─────────────────────────────────────────── */
+    .install-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+      gap: 0; margin-top: 2.5rem;
+      border-top: 1px solid var(--line);
+      border-left: 1px solid var(--line);
+    }
+    .install-card {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 2rem;
+    }
+    .install-badge {
+      font-family: var(--mono);
+      display: block; font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.02em; color: var(--green);
+      margin-bottom: 1rem;
+    }
+    .install-card h3 { font-family: var(--serif); font-weight: 400; font-size: 1.3rem; color: var(--ink); margin-bottom: 0.6rem; }
+    .install-card .desc { font-size: 0.9rem; color: var(--muted); line-height: 1.65; margin-bottom: 1.25rem; }
+    .install-steps {
+      list-style: none; margin-bottom: 1.5rem;
+      display: flex; flex-direction: column; gap: 0.6rem;
+    }
+    .install-steps li {
+      display: flex; align-items: flex-start; gap: 0.6rem;
+      font-size: 0.87rem; color: var(--ink-soft);
+    }
+    .install-steps .step-num {
+      font-family: var(--mono);
+      min-width: 20px;
+      font-size: 0.78rem; font-weight: 700; color: var(--muted-2);
+    }
+    .code-block {
+      background: var(--ink); color: #cfcabb;
+      border-radius: 3px; padding: 1rem 1.1rem;
+      font-size: 0.8rem; font-family: var(--mono);
+      margin-bottom: 1.25rem; overflow-x: auto;
+      line-height: 1.7;
+    }
+    .code-block .comment { color: #706c5c; }
+
+    /* ── OSS ─────────────────────────────────────────────── */
+    .oss {
+      background: var(--ink);
+      padding: 5rem 1.5rem;
+    }
+    .oss .section-inner { max-width: 720px; }
+    .oss .section-title { color: var(--paper); }
+    .oss .section-sub { color: #b4b0a2; margin-bottom: 2rem; }
+    .oss-meta {
+      display: flex; flex-wrap: wrap; row-gap: 0.6rem; column-gap: 1.5rem;
+      margin-bottom: 2.5rem;
+      font-family: var(--mono); font-size: 0.8rem; color: #928e7d;
+      border-top: 1px solid var(--line-dark); border-bottom: 1px solid var(--line-dark);
+      padding: 1.25rem 0;
+    }
+    .oss-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+    /* ── FOOTER ──────────────────────────────────────────── */
+    .footer {
+      background: var(--ink);
+      border-top: 1px solid var(--line-dark);
+      padding: 2rem 1.5rem;
+    }
+    .footer-inner {
+      max-width: 1080px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; flex-wrap: wrap;
+    }
+    .footer-logo {
+      display: flex; align-items: center; gap: 0.5rem;
+      color: #928e7d; font-family: var(--mono); font-size: 0.82rem;
+    }
+    .footer-logo svg { width: 18px; height: 18px; opacity: 0.6; }
+    .footer-links { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+    .footer-links a { color: var(--muted-2); font-size: 0.8rem; transition: color 0.15s; }
+    .footer-links a:hover { color: var(--paper); }
+    .footer-copy { color: #6f6c5e; font-size: 0.76rem; font-family: var(--mono); }
+
+    /* ── UTILS ───────────────────────────────────────────── */
+    .tag {
+      font-family: var(--mono);
+      display: inline-block; padding: 0.15rem 0.5rem;
+      border-radius: 3px; font-size: 0.68rem; font-weight: 600;
+      background: var(--green-tint); color: var(--green-deep);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAVIGATION ─────────────────────────────────────────── -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <rect width="512" height="512" rx="96" fill="#1f6b45"/>
+        <path d="M256 88 L412 220 L412 412 L100 412 L100 220 Z" fill="#faf9f4"/>
+        <rect x="180" y="276" width="152" height="34" rx="6" fill="#1f6b45"/>
+        <rect x="180" y="336" width="110" height="34" rx="6" fill="#1f6b45"/>
+      </svg>
+      havoro
+    </a>
+    <ul class="nav-links">
+      <li><a href="#why">Why</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="guide.html">Guide</a></li>
+      <li><a href="https://github.com/charliemansell/havoro" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+    <a href="https://github.com/charliemansell/havoro/releases/latest" class="nav-cta">Download</a>
+  </div>
+</nav>
+
+<!-- ── HERO ───────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">FREE &amp; OPEN SOURCE, MIT LICENSED</div>
+    <h1>Your finances. Your machine.<br><em>Nobody else's business.</em></h1>
+    <p class="hero-sub">
+      Track every dollar without sharing a single one. Havoro is a personal finance tracker that runs entirely on your hardware. No bank logins, no cloud, no subscription.
+    </p>
+    <div class="hero-actions">
+      <a href="https://github.com/charliemansell/havoro/releases/latest" class="btn-primary">Download for Windows / Linux</a>
+      <a href="guide.html" class="btn-outline">See the user guide</a>
+    </div>
+    <div class="hero-trust">
+      <span>No bank connections</span>
+      <span>No subscription</span>
+      <span>No account required</span>
+      <span>No telemetry</span>
+      <span>Works offline</span>
+    </div>
+  </div>
+  <div class="hero-screenshot">
+    <div class="chrome"><span></span><span></span><span></span></div>
+    <img src="images/dashboard.png" alt="Havoro dashboard showing net worth, spending, and goals" loading="eager">
+  </div>
+</section>
+
+<!-- ── WHY SECTION ────────────────────────────────────────── -->
+<section class="section" id="why">
+  <div class="section-inner">
+    <div class="section-label">WHY HAVORO</div>
+    <h2 class="section-title">Finance apps that need your bank login are asking too much.</h2>
+    <p class="section-sub">Most budgeting apps require you to hand over your bank credentials or link via Open Banking. Havoro takes a different approach: you import a CSV export from your bank. That's it.</p>
+
+    <div class="why-list">
+      <div class="why-row">
+        <div class="why-num">01</div>
+        <div>
+          <h3>No bank connections</h3>
+          <p>Your bank login never touches Havoro. Download a CSV from your bank's website and import it: the same file you could open in Excel. No OAuth, no screen scraping, no credentials stored anywhere.</p>
+        </div>
+      </div>
+      <div class="why-row">
+        <div class="why-num">02</div>
+        <div>
+          <h3>Runs on your hardware</h3>
+          <p>Install the desktop app on Windows or Linux. Your data lives in a SQLite file in your own home folder. It never leaves your machine unless you want it to.</p>
+        </div>
+      </div>
+      <div class="why-row">
+        <div class="why-num">03</div>
+        <div>
+          <h3>Actually simple</h3>
+          <p>No 40-screen setup wizard, no rules engine you need a manual to configure. Add an account, import a CSV, set a budget. If you've ever abandoned a budgeting app halfway through onboarding, that won't happen here.</p>
+        </div>
+      </div>
+      <div class="why-row">
+        <div class="why-num">04</div>
+        <div>
+          <h3>No subscription, ever</h3>
+          <p>Most budgeting apps charge $10-15 a month to help you save money, which never made sense to me. MIT licensed, with none of the usual catches: no freemium tier, no "pro" plan, no ads, no telemetry. It costs nothing because it isn't a business.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="founder-note">
+      <p>I looked for a budgeting app for months. Every option I found was either $10-15 a month (to help me save money, which never made sense) or free but so complicated I gave up before finishing the setup wizard. Havoro is the app I wished existed. It doesn't have a subscription, a bank login to hand over, or a bloated onboarding flow. Just track what comes in, what goes out, and what's left.</p>
+      <p class="founder-sig">CHARLIE MANSELL, CREATOR OF HAVORO</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── COMPARISON ─────────────────────────────────────────── -->
+<section class="section" style="border-top: none; padding-top: 0;">
+  <div class="section-inner">
+    <div class="compare-scroll">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Havoro</th>
+            <th>Mint / YNAB</th>
+            <th>Spreadsheet</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>No bank login required</td>
+            <td class="hl-col">Yes</td>
+            <td class="cross">No</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Data stays on your hardware</td>
+            <td class="hl-col">Yes</td>
+            <td class="cross">No</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Free to use</td>
+            <td class="hl-col">Yes</td>
+            <td class="cross">Subscription</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Auto-categorise transactions</td>
+            <td class="hl-col">Yes</td>
+            <td>Yes</td>
+            <td class="cross">No</td>
+          </tr>
+          <tr>
+            <td>Net worth tracking</td>
+            <td class="hl-col">Yes</td>
+            <td>Yes</td>
+            <td class="cross">Manual</td>
+          </tr>
+          <tr>
+            <td>Accessible from your phone</td>
+            <td class="hl-col">In the works</td>
+            <td>Yes</td>
+            <td class="cross">No</td>
+          </tr>
+          <tr>
+            <td>Works without internet</td>
+            <td class="hl-col">Yes</td>
+            <td class="cross">No</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Open source</td>
+            <td class="hl-col">Yes</td>
+            <td class="cross">No</td>
+            <td class="cross">n/a</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ───────────────────────────────────────────── -->
+<section class="section" id="features">
+  <div class="section-inner">
+    <div class="section-label">FEATURES</div>
+    <h2 class="section-title">Everything you need to understand your money</h2>
+    <p class="section-sub">Built around the things that matter: where your money is, where it's going, and whether you're on track.</p>
+    <div class="features-grid">
+
+      <div class="feature-card">
+        <span class="num">01</span>
+        <h3>Dashboard</h3>
+        <p>Monthly snapshot: net worth, income vs expenses, savings rate, top spending categories, and active goals, all in one view.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="num">02</span>
+        <h3>Transactions</h3>
+        <p>Import CSV exports from ANZ, NAB, Westpac, CommBank. Auto-categorise with keyword rules. Search, filter, and mark transfers.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="num">03</span>
+        <h3>Budget</h3>
+        <p>Set monthly category budgets and track your actuals in real time. Know exactly how much is safe to spend, today.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="num">04</span>
+        <h3>Goals &amp; sinking funds</h3>
+        <p>Track savings targets and irregular expense pots: holidays, car rego, Christmas. See the required monthly contribution.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="num">05</span>
+        <h3>Net worth</h3>
+        <p>Full asset-class breakdown: cash, super, property, shares, and liabilities. Watch your trend month over month.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="num">06</span>
+        <h3>Transfer planner</h3>
+        <p>Know exactly what to transfer at the start of each month: bills account top-up, savings, sinking funds, grouped by destination account.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="num">07</span>
+        <h3>Accounts &amp; assets</h3>
+        <p>Manage bank accounts, super, property, share portfolios, and loans. Property valuations, share prices, and balance projections built in.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="num">08</span>
+        <h3>iPhone app</h3>
+        <p>A native iPhone app is in development, syncing with the desktop app directly over your home network. No cloud, no server to run. <span class="tag">Coming soon</span></p>
+      </div>
+
+      <div class="feature-card">
+        <span class="num">09</span>
+        <h3>Automated backups</h3>
+        <p>Nightly backups with 30-day retention. One-click restore from Settings. Your data is always protected.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── SCREENSHOTS ─────────────────────────────────────────── -->
+<section class="section screenshots" id="screenshots">
+  <div class="section-inner">
+    <div class="section-label" style="color:#8fc4a6;">SCREENSHOTS</div>
+    <h2 class="section-title">See it in action</h2>
+    <p class="section-sub">A clean, focused interface that gets out of your way.</p>
+    <div class="ss-grid">
+      <div class="ss-item">
+        <img src="images/transactions.png" alt="Transactions view" loading="lazy">
+        <div class="ss-label">Transactions: import, categorise, and search</div>
+      </div>
+      <div class="ss-item">
+        <img src="images/budget.png" alt="Budget view" loading="lazy">
+        <div class="ss-label">Budget: monthly actuals vs targets</div>
+      </div>
+      <div class="ss-item">
+        <img src="images/net-worth.png" alt="Net worth view" loading="lazy">
+        <div class="ss-label">Net worth: asset breakdown and trend</div>
+      </div>
+      <div class="ss-item">
+        <img src="images/assets.png" alt="Assets view" loading="lazy">
+        <div class="ss-label">Assets: property, shares, and super</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── INSTALL ─────────────────────────────────────────────── -->
+<section class="section" id="install">
+  <div class="section-inner">
+    <div class="section-label">GET STARTED</div>
+    <h2 class="section-title">Get Havoro</h2>
+    <p class="section-sub">Once you're in, the <a href="guide.html" style="color:var(--green-deep); font-weight:600;">User Guide</a> shows how to set it up for the way you bank: credit card daily driver, debit-only, bills-account system, or shared finances.</p>
+    <div class="install-grid">
+
+      <div class="install-card">
+        <span class="install-badge">DESKTOP APP</span>
+        <h3>Windows / Linux</h3>
+        <p class="desc">Download the installer and run Havoro like any other app. Your data is stored in your home folder. No Docker, no Node.js, no command line. Just double-click.</p>
+        <ul class="install-steps">
+          <li>
+            <span class="step-num">1</span>
+            Download the installer from the Releases page
+          </li>
+          <li>
+            <span class="step-num">2</span>
+            Run it. Windows may show a SmartScreen notice since the app is unsigned, so click "More info", then "Run anyway". This is normal for open-source software.
+          </li>
+          <li>
+            <span class="step-num">3</span>
+            Havoro opens in a window and sits in the system tray
+          </li>
+        </ul>
+        <a href="https://github.com/charliemansell/havoro/releases/latest" class="btn-primary" style="width:100%;justify-content:center;">Download latest release</a>
+      </div>
+
+    </div>
+    <p style="margin-top:1.5rem; font-size:0.9rem; color:var(--muted);">
+      Prefer to run your own server instead? Havoro also ships as a Docker image for anyone who wants to self-host or build on it — see the <a href="https://github.com/charliemansell/havoro/blob/main/docs/SERVER-SETUP.md" style="color:var(--green-deep); font-weight:600;">server setup docs</a> in the repo.
+    </p>
+  </div>
+</section>
+
+<!-- ── OSS ────────────────────────────────────────────────── -->
+<section class="oss">
+  <div class="section-inner">
+    <div class="section-label">OPEN SOURCE</div>
+    <h2 class="section-title">Nothing hidden. All of it yours.</h2>
+    <p class="section-sub">Havoro is MIT licensed. Read the source, audit the security model, fork it, build on it. The whole thing is on GitHub.</p>
+    <div class="oss-meta">
+      <span>MIT License</span>
+      <span>Source on GitHub</span>
+      <span>SQLite: single file, no server</span>
+      <span>Node.js + React + Electron</span>
+    </div>
+    <div class="oss-actions">
+      <a href="https://github.com/charliemansell/havoro" class="btn-primary">View on GitHub</a>
+      <a href="https://github.com/charliemansell/havoro/blob/main/docs/ARCHITECTURE.md" class="btn-outline">Architecture</a>
+      <a href="https://github.com/charliemansell/havoro/blob/main/docs/SECURITY.md" class="btn-outline">Security model</a>
+    </div>
+    <p style="margin-top:2rem; font-size:0.9rem; color:#928e7d;">
+      Havoro is free and always will be. If it saves you a subscription, you can
+      <a href="https://buymeacoffee.com/charliemansell" style="color:#8fc4a6; font-weight:600;">buy me a coffee</a>.
+      Entirely optional; it funds nothing but gratitude.
+    </p>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────── -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <rect width="512" height="512" rx="96" fill="#1f6b45"/>
+        <path d="M256 88 L412 220 L412 412 L100 412 L100 220 Z" fill="#faf9f4"/>
+        <rect x="180" y="276" width="152" height="34" rx="6" fill="#1f6b45"/>
+        <rect x="180" y="336" width="110" height="34" rx="6" fill="#1f6b45"/>
+      </svg>
+      havoro
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/charliemansell/havoro">GitHub</a>
+      <a href="https://github.com/charliemansell/havoro/releases">Releases</a>
+      <a href="guide.html">User Guide</a>
+      <a href="https://github.com/charliemansell/havoro#documentation">Docs</a>
+      <a href="https://github.com/charliemansell/havoro/blob/main/docs/SECURITY.md">Security</a>
+      <a href="https://github.com/charliemansell/havoro/blob/main/CONTRIBUTING.md">Contribute</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://buymeacoffee.com/charliemansell">Support</a>
+    </div>
+    <span class="footer-copy">MIT LICENSE · BUILT FOR PRIVACY</span>
+  </div>
+  <div style="max-width:1080px; margin:1.25rem auto 0; text-align:left;">
+    <p style="font-size:0.72rem; color:#6f6c5e; line-height:1.6;">
+      Havoro is free software provided "as is", without warranty of any kind (<a href="https://github.com/charliemansell/havoro/blob/main/LICENSE" style="color:#928e7d;">MIT License</a>).
+      Support is community-based via GitHub issues. There is no dedicated support service.
+      Havoro is a record-keeping tool; nothing it displays is financial advice.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

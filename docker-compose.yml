@@ -1,0 +1,21 @@
+services:
+  havoro:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Change HOST_PORT in .env to avoid conflicts (e.g. HOST_PORT=3001)
+      - "${HOST_PORT:-3000}:3000"
+    volumes:
+      - havoro-data:/app/data
+      - ./server/bank-profiles:/app/server/bank-profiles:ro
+      # Backup destination on the host — change the left side to your preferred path
+      - ${BACKUP_HOST_DIR:-./backups}:/app/backups
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DB_PATH: /app/data/havoro.db
+      BACKUP_DIR: /app/backups
+
+volumes:
+  havoro-data:

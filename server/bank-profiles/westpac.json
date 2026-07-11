@@ -1,0 +1,9 @@
+{
+  "name": "Westpac — Everyday / Savings",
+  "account_match": "westpac",
+  "encoding": "utf-8",
+  "skip_rows": 1,
+  "date": { "column": 0, "format": "DD/MM/YYYY" },
+  "description": { "column": 1 },
+  "debit_credit": { "debit_column": 2, "credit_column": 3 }
+}
