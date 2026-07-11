@@ -2,9 +2,10 @@ appId: com.havoro.app
 productName: Havoro
 copyright: Havoro
 
-# electron/main.js is the entry; also bundle the icon
+# electron/main.js is the entry; also bundle the icon and the preload script
 files:
   - main.js
+  - preload.js
   - tray-icon.png
 
 # Extra resources bundled alongside the Electron binary (not in asar)

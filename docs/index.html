@@ -644,6 +644,11 @@
           </li>
         </ul>
         <a href="https://github.com/charliemansell/havoro/releases/latest" class="btn-primary" style="width:100%;justify-content:center;" id="install-download">Download latest release</a>
+        <p style="margin-top:0.85rem; font-size:0.82rem; color:var(--muted); text-align:center;">
+          <a href="https://github.com/charliemansell/havoro/releases/latest" id="windows-download">Windows (.exe)</a>
+          &nbsp;·&nbsp;
+          <a href="https://github.com/charliemansell/havoro/releases/latest" id="linux-download">Linux (.AppImage)</a>
+        </p>
       </div>
 
     </div>
@@ -720,10 +725,9 @@
   var platform = /Windows/i.test(ua) ? 'win'
     : (/Linux/i.test(ua) && !/Android/i.test(ua)) ? 'linux'
     : null;
-  if (!platform) return;
 
-  function pickAsset(assets) {
-    var pattern = platform === 'win' ? /\.exe$/i : /\.AppImage$/i;
+  function findAsset(assets, plat) {
+    var pattern = plat === 'win' ? /\.exe$/i : /\.AppImage$/i;
     return (assets || []).find(function (a) { return pattern.test(a.name); });
   }
 
@@ -736,7 +740,18 @@
     .then(function (data) {
       var latest = (data || []).find(function (r) { return !r.draft; });
       if (!latest) return;
-      var asset = pickAsset(latest.assets);
+
+      // The explicit Windows/Linux links under the install card always show
+      // both options, regardless of detected OS or whether it's known at all.
+      var winAsset = findAsset(latest.assets, 'win');
+      var linuxAsset = findAsset(latest.assets, 'linux');
+      if (winAsset) { var w = document.getElementById('windows-download'); if (w) w.href = winAsset.browser_download_url; }
+      if (linuxAsset) { var l = document.getElementById('linux-download'); if (l) l.href = linuxAsset.browser_download_url; }
+
+      // The primary buttons (hero, main install CTA, nav) only get the
+      // smart treatment when the visitor's OS is confidently known.
+      if (!platform) return;
+      var asset = platform === 'win' ? winAsset : linuxAsset;
       if (!asset) return;
       var label = 'Download for ' + (platform === 'win' ? 'Windows' : 'Linux');
       ['hero-download', 'install-download'].forEach(function (id) {

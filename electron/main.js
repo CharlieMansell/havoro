@@ -1,9 +1,10 @@
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, dialog, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const http = require('http');
+const https = require('https');
 
 const PORT = 3727;
 
@@ -139,6 +140,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
     show: false,
   });
@@ -166,6 +168,62 @@ function createMainWindow() {
     }
   });
 }
+
+// ── In-app update download ────────────────────────────────────────────────────
+
+function downloadToFile(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const request = (u) => {
+      https.get(u, { headers: { 'User-Agent': 'Havoro' } }, (res) => {
+        // GitHub release assets redirect to a signed S3-style URL
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          return request(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        }
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let received = 0;
+        const out = fs.createWriteStream(destPath);
+        res.on('data', (chunk) => {
+          received += chunk.length;
+          if (total) onProgress(Math.round((received / total) * 100));
+        });
+        res.pipe(out);
+        out.on('finish', () => out.close(() => resolve()));
+        out.on('error', reject);
+      }).on('error', reject);
+    };
+    request(url);
+  });
+}
+
+ipcMain.handle('updater:download', async (event, url) => {
+  const fileName = decodeURIComponent(new URL(url).pathname.split('/').pop());
+  const destPath = path.join(app.getPath('temp'), fileName);
+  await downloadToFile(url, destPath, (percent) => {
+    event.sender.send('updater:progress', { percent });
+  });
+  return destPath;
+});
+
+ipcMain.handle('updater:install', async (event, filePath) => {
+  if (process.platform === 'linux') {
+    // AppImages are portable executables, not installers — there's nothing
+    // to "install over," just run the new one. The old file is left in
+    // place (harmless; it's just an unused file at that point).
+    fs.chmodSync(filePath, 0o755);
+    spawn(filePath, [], { detached: true, stdio: 'ignore' }).unref();
+  } else {
+    // Windows: run the NSIS installer like a normal double-click. Its
+    // customInit force-close (see build/installer.nsh) handles the running
+    // instance if our own quit below hasn't fully released it yet.
+    shell.openPath(filePath);
+  }
+  app.isQuiting = true;
+  app.quit();
+});
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 

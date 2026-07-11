@@ -657,17 +657,41 @@ function isNewer(a, b) {
 }
 
 function AboutPanel() {
+  const { isElectron } = useAuth();
   const [version, setVersion] = useState(null);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState(null); // { latest, updateAvailable } | { error }
+  // null | { percent } | { path } | { error } — only used in Electron, where
+  // window.havoroUpdater exists (added via preload.js). Older already-
+  // installed versions predate this and won't have it; falls back to the
+  // plain download link below in that case.
+  const [download, setDownload] = useState(null);
 
   useEffect(() => {
     api.get('/settings/version').then(r => setVersion(r.version)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!window.havoroUpdater) return;
+    return window.havoroUpdater.onProgress(p => {
+      setDownload(d => (d && d.path ? d : { percent: p.percent }));
+    });
+  }, []);
+
+  const startDownload = async () => {
+    setDownload({ percent: 0 });
+    try {
+      const filePath = await window.havoroUpdater.download(result.downloadUrl);
+      setDownload({ path: filePath });
+    } catch (e) {
+      setDownload({ error: e.message });
+    }
+  };
+
   const checkForUpdates = async () => {
     setChecking(true);
     setResult(null);
+    setDownload(null);
     try {
       // /releases/latest excludes pre-releases and drafts by design — Havoro
       // ships quiet pre-releases while code signing is pending, so that
@@ -679,7 +703,17 @@ function AboutPanel() {
       const data = releases.find(r => !r.draft);
       const latest = (data?.tag_name || '').replace(/^v/, '');
       if (!latest) throw new Error('No releases found');
-      setResult({ latest, updateAvailable: version ? isNewer(version, latest) : false });
+
+      const ua = navigator.userAgent;
+      const platform = /Windows/i.test(ua) ? 'win' : (/Linux/i.test(ua) && !/Android/i.test(ua)) ? 'linux' : null;
+      const pattern = platform === 'win' ? /\.exe$/i : /\.AppImage$/i;
+      const asset = platform && (data.assets || []).find(a => pattern.test(a.name));
+
+      setResult({
+        latest,
+        updateAvailable: version ? isNewer(version, latest) : false,
+        downloadUrl: asset?.browser_download_url,
+      });
     } catch (e) {
       setResult({ error: e.message });
     } finally {
@@ -708,12 +742,40 @@ function AboutPanel() {
         </p>
       )}
       {result && !result.error && result.updateAvailable && (
-        <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 rounded-lg px-3 py-2.5 text-sm">
-          <span className="text-emerald-800 dark:text-emerald-300 font-medium">Version {result.latest} is available.</span>{' '}
-          <a href={RELEASES_URL + '/latest'} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
-            Download it here
-          </a>
-          <span className="text-emerald-700 dark:text-emerald-400"> Install over the top; your data is untouched.</span>
+        <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 rounded-lg px-3 py-2.5 text-sm space-y-2">
+          <div>
+            <span className="text-emerald-800 dark:text-emerald-300 font-medium">Version {result.latest} is available.</span>{' '}
+            {!(isElectron && window.havoroUpdater && result.downloadUrl) && (
+              <>
+                <a href={result.downloadUrl || RELEASES_URL + '/latest'} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
+                  Download it here
+                </a>
+                <span className="text-emerald-700 dark:text-emerald-400"> Install over the top; your data is untouched.</span>
+              </>
+            )}
+          </div>
+
+          {isElectron && window.havoroUpdater && result.downloadUrl && (
+            <div>
+              {!download && (
+                <button className="btn-primary text-xs" onClick={startDownload}>Download &amp; install</button>
+              )}
+              {download && !download.path && !download.error && (
+                <p className="text-emerald-700 dark:text-emerald-400 text-xs">Downloading… {download.percent}%</p>
+              )}
+              {download?.error && (
+                <p className="text-xs">
+                  Download failed ({download.error}).{' '}
+                  <a href={result.downloadUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline">Download manually instead</a>.
+                </p>
+              )}
+              {download?.path && (
+                <button className="btn-primary text-xs" onClick={() => window.havoroUpdater.install(download.path)}>
+                  Restart &amp; install
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
       {result && !result.error && !result.updateAvailable && (
