@@ -1,0 +1,175 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  # ── Docker image → GHCR ─────────────────────────────────────────────────────
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Docker requires lowercase image names
+      - name: Set lowercase image name
+        run: echo "IMAGE=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+
+  # ── Electron desktop app ─────────────────────────────────────────────────────
+  electron:
+    name: Desktop app (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            artifact: dist-electron/*.exe
+          - os: ubuntu-latest
+            platform: linux
+            artifact: dist-electron/*.AppImage
+
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+
+    # Windows code signing via SignPath Foundation (free for OSS).
+    # Dormant until the SIGNPATH_API_TOKEN secret and SIGNPATH_ORGANIZATION_ID
+    # variable are configured (Settings → Secrets and variables → Actions)
+    # after the SignPath application is approved. Until then releases are
+    # attached unsigned, exactly as before.
+    env:
+      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The git tag and package.json version are two separate things with
+      # nothing else keeping them in sync — GitHub's release UI just suggests
+      # the next tag based on your last one, with no idea what's actually in
+      # package.json. Catch a mismatch here instead of silently shipping an
+      # exe whose file version doesn't match the release it's attached to.
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          get_version() { grep -m1 '"version"' "$1" | sed -E 's/.*"version": *"([^"]+)".*/\1/'; }
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(get_version package.json)
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} doesn't match package.json version ${PKG_VERSION}. Bump all four package.json files (root, server, client, electron) to ${TAG_VERSION}, or tag v${PKG_VERSION} instead."
+            exit 1
+          fi
+          for f in server/package.json client/package.json electron/package.json; do
+            V=$(get_version "$f")
+            if [ "$V" != "$PKG_VERSION" ]; then
+              echo "::error::$f version ($V) doesn't match root package.json ($PKG_VERSION) — keep all four in sync."
+              exit 1
+            fi
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Build the React client
+      - name: Install client deps
+        run: npm ci
+        working-directory: client
+
+      - name: Build client
+        run: npm run build
+        working-directory: client
+
+      # Install server deps (production only)
+      - name: Install server deps
+        run: npm ci --omit=dev
+        working-directory: server
+
+      # Install native build tools
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3 python3-setuptools make g++
+
+      - name: Install build tools (Windows)
+        if: runner.os == 'Windows'
+        run: pip install setuptools
+
+      # Install Electron deps
+      - name: Install Electron deps
+        run: npm ci
+        working-directory: electron
+
+      # Rebuild better-sqlite3 for Electron's Node.js ABI
+      - name: Rebuild native modules
+        run: npm run rebuild
+        working-directory: electron
+
+      # Build the installer
+      - name: Build Electron app
+        run: npm run build:${{ matrix.platform }}
+        working-directory: electron
+
+      # ── Signed path (Windows, once SignPath is configured) ─────────────────
+      - name: Upload unsigned installer for signing
+        if: runner.os == 'Windows' && env.SIGNPATH_ENABLED == 'true'
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: dist-electron/*.exe
+
+      # Submits the installer to SignPath, which verifies it was built by this
+      # workflow, signs it, and returns it. Requires (created after approval):
+      #   secret SIGNPATH_API_TOKEN, variable SIGNPATH_ORGANIZATION_ID,
+      #   a SignPath project "havoro" with signing policy "release-signing".
+      # Verify parameter names against https://docs.signpath.io when activating.
+      - name: Sign installer via SignPath
+        if: runner.os == 'Windows' && env.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v1.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: havoro
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Upload signed installer to release
+        if: runner.os == 'Windows' && env.SIGNPATH_ENABLED == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: signed/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Unsigned path (Linux always; Windows until SignPath is configured) ──
+      - name: Upload to release
+        if: runner.os != 'Windows' || env.SIGNPATH_ENABLED != 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ matrix.artifact }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

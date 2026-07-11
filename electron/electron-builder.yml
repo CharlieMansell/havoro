@@ -1,0 +1,46 @@
+appId: com.havoro.app
+productName: Havoro
+copyright: Havoro
+
+# electron/main.js is the entry; also bundle the icon
+files:
+  - main.js
+  - tray-icon.png
+
+# Extra resources bundled alongside the Electron binary (not in asar)
+extraResources:
+  # Built React client
+  - from: ../client/dist
+    to: client/dist
+    filter: ["**/*"]
+  # Server source + node_modules (native modules must be rebuilt for Electron)
+  - from: ../server
+    to: server
+    filter:
+      - "**/*"
+      - "!node_modules/.cache/**"
+      - "!node_modules/.bin/**"
+
+directories:
+  output: ../dist-electron
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Havoro
+  include: build/installer.nsh
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: tray-icon.png
+  category: Finance
