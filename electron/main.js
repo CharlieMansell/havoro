@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, dialog, ipcMain, session } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -99,7 +99,7 @@ function createLoadingWindow() {
     center: true,
     transparent: false,
     backgroundColor: '#f8fafc',
-    webPreferences: { nodeIntegration: false, contextIsolation: true },
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
   w.loadURL(`data:text/html,${encodeURIComponent(`
     <!DOCTYPE html>
@@ -140,6 +140,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
     show: false,
@@ -151,6 +152,14 @@ function createMainWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // The app has no reason to navigate anywhere but its own local server —
+  // this blocks the window itself being redirected off it (e.g. by a
+  // malicious link or a compromised dependency), on top of
+  // setWindowOpenHandler above already covering new-window/target=_blank.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(`http://localhost:${PORT}`)) event.preventDefault();
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -199,16 +208,43 @@ function downloadToFile(url, destPath, onProgress) {
   });
 }
 
+// Tracked here, not trusted from the renderer — see the comment on
+// updater:install below for why.
+let downloadedUpdatePath = null;
+
 ipcMain.handle('updater:download', async (event, url) => {
-  const fileName = decodeURIComponent(new URL(url).pathname.split('/').pop());
+  // The renderer only ever passes a URL it parsed out of GitHub's own API
+  // response, so this never triggers today — but the IPC handler itself
+  // shouldn't just trust whatever string it's given regardless. Restricting
+  // the download to GitHub's own domain means this channel can't be turned
+  // into a "fetch any URL" primitive even if the renderer were ever
+  // compromised (e.g. by an XSS-class bug). GitHub's own redirect to the
+  // signed asset host is followed as-is inside downloadToFile — that hop is
+  // controlled by GitHub, not by renderer input.
+  const parsed = new URL(url);
+  if (parsed.hostname !== 'github.com') {
+    throw new Error('Refusing to download from an untrusted host');
+  }
+
+  const fileName = decodeURIComponent(parsed.pathname.split('/').pop());
   const destPath = path.join(app.getPath('temp'), fileName);
   await downloadToFile(url, destPath, (percent) => {
     event.sender.send('updater:progress', { percent });
   });
+  downloadedUpdatePath = destPath;
   return destPath;
 });
 
-ipcMain.handle('updater:install', async (event, filePath) => {
+ipcMain.handle('updater:install', async () => {
+  // Deliberately ignores any path the renderer might pass — this only ever
+  // runs the file updater:download itself just fetched, in this same
+  // process, from a URL already validated above. Without that, this handler
+  // would be a generic "execute any file on disk" primitive reachable from
+  // the renderer, which is a much bigger blast radius than "run the update
+  // we just downloaded" if the renderer were ever compromised.
+  const filePath = downloadedUpdatePath;
+  if (!filePath) throw new Error('No update has been downloaded yet');
+
   if (process.platform === 'linux') {
     // AppImages are portable executables, not installers — there's nothing
     // to "install over," just run the new one. The old file is left in
@@ -295,6 +331,11 @@ async function attemptStartup(loading) {
 }
 
 app.whenReady().then(async () => {
+  // A finance app has no legitimate use for camera/mic/geolocation/
+  // notifications/etc — deny every permission request explicitly rather
+  // than relying on Electron's own defaults, which vary by permission type.
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(false));
+
   createTray();
   await attemptStartup(createLoadingWindow());
 

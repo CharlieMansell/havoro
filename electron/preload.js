@@ -5,7 +5,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 // else the renderer needs stays fully sandboxed (nodeIntegration: false).
 contextBridge.exposeInMainWorld('havoroUpdater', {
   download: (url) => ipcRenderer.invoke('updater:download', url),
-  install: (filePath) => ipcRenderer.invoke('updater:install', filePath),
+  // Takes no path — the main process only ever installs the file its own
+  // download handler just fetched, never a renderer-supplied path.
+  install: () => ipcRenderer.invoke('updater:install'),
   onProgress: (callback) => {
     const listener = (event, progress) => callback(progress);
     ipcRenderer.on('updater:progress', listener);

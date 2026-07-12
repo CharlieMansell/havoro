@@ -770,7 +770,7 @@ function AboutPanel() {
                 </p>
               )}
               {download?.path && (
-                <button className="btn-primary text-xs" onClick={() => window.havoroUpdater.install(download.path)}>
+                <button className="btn-primary text-xs" onClick={() => window.havoroUpdater.install()}>
                   Restart &amp; install
                 </button>
               )}

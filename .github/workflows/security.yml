@@ -1,0 +1,53 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so newly-disclosed CVEs in existing dependencies get caught
+    # even in a week with no code changes at all.
+    - cron: '17 6 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - uses: github/codeql-action/analyze@v3
+
+  dependency-audit:
+    name: Dependency audit (runtime deps only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --omit=dev on every package: build-time-only tooling
+      # (electron-builder, vite) never ships inside the installer or Docker
+      # image, so a vulnerability there doesn't reach anyone running Havoro —
+      # only what's actually bundled into the running app matters here.
+      - name: Audit root
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit server
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: server
+
+      - name: Audit client
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: client
+
+      - name: Audit electron
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: electron
