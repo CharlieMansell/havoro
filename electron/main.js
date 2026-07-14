@@ -32,9 +32,25 @@ function getOrCreateSecret() {
 
 // ── Server ────────────────────────────────────────────────────────────────────
 
+// The only record of a server-side crash once the app is packaged — there's
+// no attached terminal to see console.log/error in, so without this a crash
+// dialog is the only signal, with no way to find out what actually happened.
+const logDir = ensureDir(path.join(userData(), 'logs'));
+const logPath = path.join(logDir, 'server.log');
+
+function appendLog(line) {
+  try {
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${line}\n`);
+  } catch { /* best-effort; a logging failure shouldn't crash the app */ }
+}
+
 function startServer() {
   const dataDir = ensureDir(path.join(userData(), 'data'));
   const backupDir = ensureDir(path.join(userData(), 'backups'));
+
+  // Truncate at the start of each run so the log shows this session's
+  // output, not an ever-growing history from every launch since install.
+  try { fs.writeFileSync(logPath, ''); } catch { /* best-effort */ }
 
   serverProcess = spawn(process.execPath, [path.join(resourceBase(), 'server', 'index.js')], {
     env: {
@@ -51,8 +67,8 @@ function startServer() {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  serverProcess.stdout.on('data', d => console.log('[server]', d.toString().trim()));
-  serverProcess.stderr.on('data', d => console.error('[server]', d.toString().trim()));
+  serverProcess.stdout.on('data', d => { const line = d.toString().trim(); console.log('[server]', line); appendLog(line); });
+  serverProcess.stderr.on('data', d => { const line = d.toString().trim(); console.error('[server]', line); appendLog(line); });
   serverProcess.on('exit', (code, signal) => {
     if (app.isQuiting || signal === 'SIGTERM') return; // we asked it to stop
     if (code === 0) {
@@ -65,7 +81,11 @@ function startServer() {
         .catch(() => dialog.showErrorBox('Havoro', 'The server restarted but did not come back up. Please restart Havoro.'));
       return;
     }
-    dialog.showErrorBox('Havoro', `The server stopped unexpectedly (code ${code}). Please restart the app.`);
+    appendLog(`[main] Server process exited with code ${code}, signal ${signal}`);
+    dialog.showErrorBox(
+      'Havoro',
+      `The server stopped unexpectedly (code ${code}). Please restart the app.\n\nDetails were saved to:\n${logPath}`
+    );
   });
 }
 
@@ -279,6 +299,11 @@ function createTray() {
     {
       label: 'Open Havoro',
       click: () => { if (mainWindow) mainWindow.show(); else createMainWindow(); },
+    },
+    { type: 'separator' },
+    {
+      label: 'Open logs folder',
+      click: () => shell.openPath(logDir),
     },
     { type: 'separator' },
     {
