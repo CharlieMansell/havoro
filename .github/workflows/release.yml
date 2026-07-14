@@ -14,7 +14,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -63,7 +63,7 @@ jobs:
       SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The git tag and package.json version are two separate things with
       # nothing else keeping them in sync — GitHub's release UI just suggests
