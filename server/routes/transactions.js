@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db/db');
 const { requireAuth } = require('../middleware/auth');
+const { categorise } = require('../services/categoriser');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -54,6 +55,54 @@ router.get('/needs-review/count', (req, res) => {
     'SELECT COUNT(*) as n FROM transactions WHERE category_id IS NULL AND is_transfer = 0'
   ).get();
   res.json({ count: n });
+});
+
+// POST /api/transactions/bulk-categorize
+// Applies one category_id (or is_transfer flag) to a batch of transaction ids at once.
+router.post('/bulk-categorize', (req, res) => {
+  const { ids, category_id, is_transfer } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids must be a non-empty array' });
+  }
+  if (category_id === undefined && is_transfer === undefined) {
+    return res.status(400).json({ error: 'category_id or is_transfer required' });
+  }
+
+  const fields = [];
+  const values = [];
+  if (category_id !== undefined) { fields.push('category_id = ?'); values.push(category_id || null); }
+  if (is_transfer !== undefined) { fields.push('is_transfer = ?'); values.push(is_transfer ? 1 : 0); }
+
+  const placeholders = ids.map(() => '?').join(',');
+  const stmt = db.prepare(`UPDATE transactions SET ${fields.join(', ')} WHERE id IN (${placeholders})`);
+  const result = stmt.run(...values, ...ids);
+
+  res.json({ updated: result.changes });
+});
+
+// POST /api/transactions/apply-rules
+// Re-runs categorisation rules against transactions that don't have a
+// category yet — covers the case where a rule is created or edited after
+// the matching transactions were already imported, since rules otherwise
+// only ever run once, at import time (see services/categoriser.js).
+// Only ever touches uncategorised rows, so it can never clobber a category
+// someone picked by hand.
+router.post('/apply-rules', (req, res) => {
+  const rows = db.prepare(
+    'SELECT id, description, description_clean FROM transactions WHERE category_id IS NULL AND is_transfer = 0'
+  ).all();
+
+  const update = db.prepare('UPDATE transactions SET category_id = ? WHERE id = ?');
+  let updated = 0;
+  const applyAll = db.transaction((txs) => {
+    for (const tx of txs) {
+      const categoryId = categorise(tx.description_clean || tx.description);
+      if (categoryId) { update.run(categoryId, tx.id); updated++; }
+    }
+  });
+  applyAll(rows);
+
+  res.json({ checked: rows.length, updated });
 });
 
 // PUT /api/transactions/:id

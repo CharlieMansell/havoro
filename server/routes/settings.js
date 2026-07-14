@@ -59,7 +59,7 @@ router.get('/backups', requireAdmin, (req, res) => {
   try {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
     const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => /^havoro-\d{4}-\d{2}-\d{2}\.db$/.test(f))
+      .filter(f => /^havoro-\d{4}-\d{2}-\d{2}-\d{6}\.db$/.test(f))
       .map(f => {
         const stat = fs.statSync(path.join(BACKUP_DIR, f));
         return { filename: f, size: stat.size, mtime: stat.mtime.toISOString() };
@@ -108,7 +108,7 @@ router.post('/restore/:filename', requireAdmin, (req, res) => {
   if (restoring) return res.status(409).json({ error: 'Restore already in progress' });
 
   const { filename } = req.params;
-  if (!/^havoro-\d{4}-\d{2}-\d{2}\.db$/.test(filename)) {
+  if (!/^havoro-\d{4}-\d{2}-\d{2}-\d{6}\.db$/.test(filename)) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
 

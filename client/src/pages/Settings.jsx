@@ -348,6 +348,7 @@ function RulesPanel({ toast, confirm }) {
   const [categories, setCategories] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [applying, setApplying] = useState(false);
 
   const load = () => {
     api.get('/rules').then(setRules).catch(console.error);
@@ -391,14 +392,34 @@ function RulesPanel({ toast, confirm }) {
 
   const editingRule = rules.find(r => r.id === editingId);
 
+  const applyToExisting = async () => {
+    setApplying(true);
+    try {
+      const res = await api.post('/transactions/apply-rules', {});
+      toast.addToast(`${res.updated} of ${res.checked} uncategorised transaction${res.checked === 1 ? '' : 's'} categorised`);
+    } catch (e) {
+      toast.addToast(e.message, 'error');
+    } finally {
+      setApplying(false);
+    }
+  };
+
   return (
     <div className="card space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Categorisation rules</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Rules run in priority order on import. Lower number = higher priority. First match wins.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Rules run in priority order on import. Lower number = higher priority. First match wins.
+            New or edited rules only apply going forward — use "Apply to existing" to run them against transactions you've already imported.
+          </p>
         </div>
-        <button className="btn-secondary text-xs shrink-0" onClick={() => { setShowAdd(true); setEditingId(null); }}>+ Add rule</button>
+        <div className="flex gap-2 shrink-0">
+          <button className="btn-secondary text-xs" onClick={applyToExisting} disabled={applying}>
+            {applying ? 'Applying…' : 'Apply to existing transactions'}
+          </button>
+          <button className="btn-secondary text-xs" onClick={() => { setShowAdd(true); setEditingId(null); }}>+ Add rule</button>
+        </div>
       </div>
 
       {showAdd && (

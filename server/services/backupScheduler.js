@@ -23,7 +23,7 @@ async function backupIfStale() {
   try {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
     const newest = fs.readdirSync(BACKUP_DIR)
-      .filter(f => /^havoro-\d{4}-\d{2}-\d{2}\.db$/.test(f))
+      .filter(f => /^havoro-\d{4}-\d{2}-\d{2}-\d{6}\.db$/.test(f))
       .map(f => fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs)
       .sort((a, b) => b - a)[0];
     if (newest && Date.now() - newest < 24 * 60 * 60 * 1000) return;

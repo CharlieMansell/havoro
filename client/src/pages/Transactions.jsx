@@ -23,17 +23,26 @@ export default function Transactions() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [suggestRule, setSuggestRule] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkCategoryId, setBulkCategoryId] = useState('');
+  const [bulkApplying, setBulkApplying] = useState(false);
 
   const page = Number(searchParams.get('page') || 1);
   const needsReview = searchParams.get('needs_review') === 'true';
   const search = searchParams.get('search') || '';
   const accountId = searchParams.get('account_id') || '';
+  const categoryId = searchParams.get('category_id') || '';
+  const dateFrom = searchParams.get('date_from') || '';
+  const dateTo = searchParams.get('date_to') || '';
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
     if (needsReview) params.set('needs_review', 'true');
     if (search) params.set('search', search);
     if (accountId) params.set('account_id', accountId);
+    if (categoryId) params.set('category_id', categoryId);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
     params.set('page', page);
     params.set('limit', '50');
 
@@ -42,12 +51,49 @@ export default function Transactions() {
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [page, needsReview, search, accountId]);
+  }, [page, needsReview, search, accountId, categoryId, dateFrom, dateTo]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     api.get('/categories').then(setCategories).catch(console.error);
   }, []);
+  // Any filter change invalidates whatever was selected on the previous page/view.
+  useEffect(() => { setSelected(new Set()); }, [page, needsReview, search, accountId, categoryId, dateFrom, dateTo]);
+
+  const updateFilter = (key, value) => setSearchParams(p => {
+    const n = new URLSearchParams(p);
+    value ? n.set(key, value) : n.delete(key);
+    n.delete('page');
+    return n;
+  });
+
+  const toggleSelected = (id) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const allOnPageSelected = data.rows.length > 0 && data.rows.every(tx => selected.has(tx.id));
+  const toggleSelectAll = () => setSelected(prev => {
+    if (allOnPageSelected) return new Set();
+    return new Set(data.rows.map(tx => tx.id));
+  });
+
+  const bulkApply = async () => {
+    if (!bulkCategoryId || selected.size === 0) return;
+    setBulkApplying(true);
+    try {
+      await api.post('/transactions/bulk-categorize', { ids: [...selected], category_id: Number(bulkCategoryId) });
+      toast.addToast(`${selected.size} transaction${selected.size === 1 ? '' : 's'} categorised`);
+      setSelected(new Set());
+      setBulkCategoryId('');
+      load();
+    } catch (e) {
+      toast.addToast(e.message, 'error');
+    } finally {
+      setBulkApplying(false);
+    }
+  };
 
   const updateCategory = async (tx, categoryId) => {
     await api.put(`/transactions/${tx.id}`, { category_id: categoryId || null });
@@ -84,7 +130,35 @@ export default function Transactions() {
           className="input w-48"
           placeholder="Search…"
           value={search}
-          onChange={e => setSearchParams(p => { const n = new URLSearchParams(p); e.target.value ? n.set('search', e.target.value) : n.delete('search'); n.delete('page'); return n; })}
+          onChange={e => updateFilter('search', e.target.value)}
+        />
+
+        <select
+          className="input w-40 text-sm"
+          value={categoryId}
+          onChange={e => updateFilter('category_id', e.target.value)}
+        >
+          <option value="">All categories</option>
+          {groups.map(g => (
+            <optgroup key={g.id} label={g.name}>
+              {g.children.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </optgroup>
+          ))}
+        </select>
+
+        <input
+          type="date"
+          className="input w-36 text-sm"
+          value={dateFrom}
+          onChange={e => updateFilter('date_from', e.target.value)}
+          title="From date"
+        />
+        <input
+          type="date"
+          className="input w-36 text-sm"
+          value={dateTo}
+          onChange={e => updateFilter('date_to', e.target.value)}
+          title="To date"
         />
 
         {needsReview ? (
@@ -93,6 +167,28 @@ export default function Transactions() {
           <button className="btn-secondary text-xs" onClick={() => setSearchParams({ needs_review: 'true' })}>Needs review</button>
         )}
       </div>
+
+      {selected.size > 0 && (
+        <div className="card py-3 flex items-center gap-3 flex-wrap bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800">
+          <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">{selected.size} selected</span>
+          <select
+            className="input w-48 text-sm"
+            value={bulkCategoryId}
+            onChange={e => setBulkCategoryId(e.target.value)}
+          >
+            <option value="">Set category…</option>
+            {groups.map(g => (
+              <optgroup key={g.id} label={g.name}>
+                {g.children.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+          <button className="btn-primary text-xs" onClick={bulkApply} disabled={!bulkCategoryId || bulkApplying}>
+            {bulkApplying ? 'Applying…' : 'Apply'}
+          </button>
+          <button className="btn-secondary text-xs" onClick={() => setSelected(new Set())}>Clear selection</button>
+        </div>
+      )}
 
       <div className="card p-0 overflow-hidden">
         {loading ? (
@@ -104,6 +200,9 @@ export default function Transactions() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-700">
+                <th className="w-8 px-4 py-3">
+                  <input type="checkbox" className="rounded" checked={allOnPageSelected} onChange={toggleSelectAll} onClick={e => e.stopPropagation()} />
+                </th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">Date</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">Description</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">Account</th>
@@ -114,6 +213,9 @@ export default function Transactions() {
             <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
               {data.rows.map(tx => (
                 <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer" onClick={() => setEditing(tx)}>
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" className="rounded" checked={selected.has(tx.id)} onChange={() => toggleSelected(tx.id)} />
+                  </td>
                   <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatDate(tx.date)}</td>
                   <td className="px-4 py-3 text-slate-800 dark:text-slate-100 max-w-xs truncate">
                     {tx.description_clean || tx.description}

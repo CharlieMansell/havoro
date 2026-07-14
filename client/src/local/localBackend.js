@@ -321,6 +321,31 @@ function handle(method, path, query, body) {
   if ((match = m(/^\/transactions\/(\d+)$/)) && method === 'PUT')
     return updateAllowed('transactions', match[1], body, ['category_id', 'notes', 'is_transfer', 'description_clean']);
 
+  if (path === '/transactions/bulk-categorize' && method === 'POST') {
+    const { ids, category_id, is_transfer } = body;
+    if (!Array.isArray(ids) || ids.length === 0) return { error: 'ids must be a non-empty array', status: 400 };
+    if (category_id === undefined && is_transfer === undefined) return { error: 'category_id or is_transfer required', status: 400 };
+    const fields = [];
+    const values = [];
+    if (category_id !== undefined) { fields.push('category_id = ?'); values.push(category_id || null); }
+    if (is_transfer !== undefined) { fields.push('is_transfer = ?'); values.push(is_transfer ? 1 : 0); }
+    const placeholders = ids.map(() => '?').join(',');
+    db.run(`UPDATE transactions SET ${fields.join(', ')} WHERE id IN (${placeholders})`, [...values, ...ids]);
+    persist();
+    return { updated: ids.length };
+  }
+
+  if (path === '/transactions/apply-rules' && method === 'POST') {
+    const rows = all('SELECT id, description, description_clean FROM transactions WHERE category_id IS NULL AND is_transfer = 0');
+    let updated = 0;
+    for (const tx of rows) {
+      const categoryId = categorise(tx.description_clean || tx.description);
+      if (categoryId) { db.run('UPDATE transactions SET category_id = ? WHERE id = ?', [categoryId, tx.id]); updated++; }
+    }
+    persist();
+    return { checked: rows.length, updated };
+  }
+
   if (path === '/accounts' && method === 'GET') return all('SELECT * FROM accounts WHERE archived = 0 ORDER BY type, name');
   if (path === '/accounts' && method === 'POST') {
     const { lastInsertRowid } = run(
