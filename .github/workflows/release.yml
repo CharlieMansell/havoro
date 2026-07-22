@@ -135,7 +135,7 @@ jobs:
       - name: Upload unsigned installer for signing
         if: runner.os == 'Windows' && env.SIGNPATH_ENABLED == 'true'
         id: unsigned
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unsigned-installer
           path: dist-electron/*.exe
