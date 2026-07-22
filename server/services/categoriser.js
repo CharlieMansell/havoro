@@ -2,7 +2,11 @@ const db = require('../db/db');
 
 // Same shape rejected at rule-creation time (routes/rules.js) — kept here too
 // so a rule inserted any other way can't hang the event loop during import.
-const DANGEROUS_REGEX_SHAPE = /\([^()]*[+*][^()]*\)[+*]/;
+const DANGEROUS_REGEX_SHAPE = /\([^()]*[+*][^()]*\)[+*]|\([^()]*\|[^()]*\)[+*]/;
+// Bounds worst-case backtracking time on any pattern that still slips past
+// the shape check above — matching happens against every imported
+// transaction description, so this caps the input rather than the pattern.
+const MAX_DESCRIPTION_LENGTH = 500;
 
 function getRules() {
   return db.prepare(
@@ -22,7 +26,10 @@ function categorise(description) {
       match = lower.startsWith(pat);
     } else if (rule.match_type === 'regex') {
       if (rule.pattern.length > 100 || DANGEROUS_REGEX_SHAPE.test(rule.pattern)) { match = false; }
-      else { try { match = new RegExp(rule.pattern, 'i').test(description); } catch { match = false; } }
+      else {
+        try { match = new RegExp(rule.pattern, 'i').test(description.slice(0, MAX_DESCRIPTION_LENGTH)); }
+        catch { match = false; }
+      }
     }
     if (match) return rule.category_id;
   }

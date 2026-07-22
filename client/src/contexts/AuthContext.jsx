@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { CSRF_HEADERS } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -57,7 +58,7 @@ export function AuthProvider({ children }) {
       await fetch('/api/auth/theme', {
         method: 'PUT',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CSRF_HEADERS },
         body: JSON.stringify({ theme: next }),
       }).catch(() => {});
     }
@@ -75,7 +76,7 @@ export function AuthProvider({ children }) {
       if (!needs && isElectron) {
         // Desktop, account already exists, just no valid cookie (e.g. first
         // launch after the 7-day session expired) — sign back in silently.
-        const localRes = await fetch('/api/auth/local-login', { method: 'POST', credentials: 'include' });
+        const localRes = await fetch('/api/auth/local-login', { method: 'POST', credentials: 'include', headers: CSRF_HEADERS });
         if (localRes.ok) setUser(await localRes.json());
         else setUser(null);
         return;
@@ -88,7 +89,7 @@ export function AuthProvider({ children }) {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CSRF_HEADERS },
       body: JSON.stringify({ email, password }),
     });
     const data = await res.json();
@@ -102,7 +103,7 @@ export function AuthProvider({ children }) {
     const res = await fetch('/api/auth/local-setup', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CSRF_HEADERS },
       body: JSON.stringify({ name }),
     });
     const data = await res.json();
@@ -117,7 +118,7 @@ export function AuthProvider({ children }) {
     const res = await fetch('/api/auth/setup', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CSRF_HEADERS },
       body: JSON.stringify({ name, email, password }),
     });
     const data = await res.json();
@@ -128,7 +129,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', headers: CSRF_HEADERS });
     setUser(null);
   };
 

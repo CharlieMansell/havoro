@@ -11,10 +11,14 @@ router.use(requireAuth);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const PROFILES_DIR = path.join(__dirname, '../bank-profiles');
+const PROFILES_DIR_RESOLVED = path.resolve(PROFILES_DIR) + path.sep;
 
 function loadProfile(name) {
   if (!/^[a-zA-Z0-9_-]+$/.test(name)) return null;
   const file = path.join(PROFILES_DIR, `${name}.json`);
+  // Belt-and-suspenders on top of the regex above: confirms the resolved
+  // path never leaves PROFILES_DIR before it's read.
+  if (!path.resolve(file).startsWith(PROFILES_DIR_RESOLVED)) return null;
   if (!fs.existsSync(file)) return null;
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
