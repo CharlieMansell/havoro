@@ -21,7 +21,7 @@
     "multer": "^2.2.0",
     "node-cron": "^4.6.0",
     "safe-regex": "^2.1.1",
-    "yahoo-finance2": "^3.15.2"
+    "yahoo-finance2": "^4.0.0"
   },
   "overrides": {
     "@hono/node-server": "^2.0.11"
