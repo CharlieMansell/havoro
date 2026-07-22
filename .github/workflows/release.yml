@@ -159,7 +159,7 @@ jobs:
 
       - name: Upload signed installer to release
         if: runner.os == 'Windows' && env.SIGNPATH_ENABLED == 'true'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           files: signed/*.exe
         env:
@@ -168,7 +168,7 @@ jobs:
       # ── Unsigned path (Linux always; Windows until SignPath is configured) ──
       - name: Upload to release
         if: runner.os != 'Windows' || env.SIGNPATH_ENABLED != 'true'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ matrix.artifact }}
         env:
