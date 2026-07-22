@@ -93,6 +93,23 @@ jobs:
           node-version: 20
           cache: npm
 
+      # Native build tools, installed before anything that might compile a
+      # native module (better-sqlite3's postinstall runs node-gyp as soon as
+      # "Install server deps" below executes, so the toolchain has to be
+      # ready before that point, not after it).
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3 python3-setuptools make g++
+
+      # node-gyp's own Visual Studio auto-detection (find-visualstudio.js)
+      # can fail to recognize newer VS releases on the runner image ("unknown
+      # version 'undefined'") and refuses to use them. Setting VCINSTALLDIR
+      # (which this action does) makes node-gyp trust the toolchain directly
+      # instead of trying to parse the VS version string itself.
+      - name: Install build tools (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       # Build the React client
       - name: Install client deps
         run: npm ci
@@ -106,15 +123,6 @@ jobs:
       - name: Install server deps
         run: npm ci --omit=dev
         working-directory: server
-
-      # Install native build tools
-      - name: Install build tools (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y python3 python3-setuptools make g++
-
-      - name: Install build tools (Windows)
-        if: runner.os == 'Windows'
-        run: pip install setuptools
 
       # Install Electron deps
       - name: Install Electron deps
