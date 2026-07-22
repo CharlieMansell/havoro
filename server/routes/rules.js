@@ -1,4 +1,5 @@
 const express = require('express');
+const safeRegex = require('safe-regex');
 const db = require('../db/db');
 const { requireAuth } = require('../middleware/auth');
 
@@ -6,17 +7,20 @@ const router = express.Router();
 router.use(requireAuth);
 
 const MAX_PATTERN_LENGTH = 100;
-// Rejects the classic catastrophic-backtracking shapes: nested quantifiers
-// like (a+)+, (a*)*, (a+)*, (a*)+, and quantified alternation like (a|a)+,
-// (a|ab)* — cheap defense against a ReDoS rule hanging the server's single
-// event loop on every future CSV import.
-const DANGEROUS_REGEX_SHAPE = /\([^()]*[+*][^()]*\)[+*]|\([^()]*\|[^()]*\)[+*]/;
+// safe-regex only rejects star-height > 1 (e.g. (a+)+) and has known
+// false negatives on quantified alternation — (a|a)+, (a|ab)* pass it but
+// can still backtrack badly, so that shape is caught separately.
+const DANGEROUS_ALTERNATION_SHAPE = /\([^()]*\|[^()]*\)[+*]/;
 
 function validatePattern(match_type, pattern) {
   if (typeof pattern !== 'string' || pattern.length === 0) return 'pattern is required';
   if (pattern.length > MAX_PATTERN_LENGTH) return `pattern must be ${MAX_PATTERN_LENGTH} characters or fewer`;
   if (match_type === 'regex') {
-    if (DANGEROUS_REGEX_SHAPE.test(pattern)) return 'pattern contains a nested quantifier that could hang on some inputs (e.g. (a+)+) — simplify it';
+    // Cheap defense against a ReDoS rule hanging the server's single event
+    // loop on every future CSV import.
+    if (!safeRegex(pattern) || DANGEROUS_ALTERNATION_SHAPE.test(pattern)) {
+      return 'pattern is too complex and could hang on some inputs (e.g. nested repetition like (a+)+) — simplify it';
+    }
     try { new RegExp(pattern); } catch { return 'pattern is not a valid regular expression'; }
   }
   return null;

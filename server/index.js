@@ -18,8 +18,10 @@ const express = require('express');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
+const crypto = require('crypto');
 const path = require('path');
 const { rateLimit } = require('express-rate-limit');
+const { doubleCsrf } = require('csrf-csrf');
 const backupScheduler = require('./services/backupScheduler');
 
 const app = express();
@@ -54,17 +56,49 @@ app.use(cors({
 
 // Auth is entirely cookie-based (see routes/auth.js), so every mutating
 // request needs an explicit CSRF defense on top of the SameSite=Lax cookie
-// above. A custom header can't be attached to a cross-origin request without
-// a CORS preflight succeeding, and the origin lock above means it never
-// does — so requiring it here is a check only same-origin JS can pass.
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-app.use('/api', (req, res, next) => {
-  if (SAFE_METHODS.has(req.method) || req.headers['x-havoro-csrf']) return next();
-  res.status(403).json({ error: 'Missing CSRF header' });
+// above — the double-submit pattern below via csrf-csrf.
+//
+// The "session" csrf-csrf binds a token to isn't the login session — a
+// plain per-browser id set on first request, independent of auth state, so
+// the same protection covers the pre-login setup/login routes too.
+app.use((req, res, next) => {
+  let sid = req.cookies['csrf-sid'];
+  if (!sid) {
+    sid = crypto.randomBytes(16).toString('hex');
+    res.cookie('csrf-sid', sid, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: process.env.COOKIE_SECURE === 'true',
+      path: '/',
+      maxAge: 400 * 24 * 60 * 60 * 1000,
+    });
+  }
+  req.csrfSid = sid;
+  next();
+});
+
+const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
+  getSecret: () => process.env.JWT_SECRET,
+  getSessionIdentifier: (req) => req.csrfSid,
+  cookieName: 'csrf-token',
+  cookieOptions: {
+    sameSite: 'strict',
+    secure: process.env.COOKIE_SECURE === 'true',
+    path: '/',
+  },
+  getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'],
 });
 
 // Health check (unauthenticated — used by Docker and Electron)
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// The client fetches this once per session (see client/src/lib/api.js) and
+// attaches the token to every mutating request's X-Csrf-Token header. GET
+// is exempt from doubleCsrfProtection below by default, so this route
+// itself needs no protection.
+app.get('/api/csrf-token', (req, res) => res.json({ csrfToken: generateCsrfToken(req, res) }));
+
+app.use('/api', doubleCsrfProtection);
 
 // General API throttle — /api/auth/login has its own tighter limiter on top of this
 const generalLimiter = rateLimit({
