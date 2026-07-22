@@ -14,13 +14,27 @@ extraResources:
   - from: ../client/dist
     to: client/dist
     filter: ["**/*"]
-  # Server source + node_modules (native modules must be rebuilt for Electron)
+  # Server source. node_modules is deliberately excluded here and copied via
+  # a separate entry below - electron-builder's file matcher unconditionally
+  # drops a directory literally named "node_modules" sitting at the root of
+  # an extraResources "from" path (see app-builder-lib's util/filter.js:
+  # `if (relative === "node_modules") return false`), no matter what filter
+  # patterns are set. That silently produced installers with an empty
+  # server/node_modules, crashing on launch with "Cannot find module".
   - from: ../server
     to: server
     filter:
       - "**/*"
-      - "!node_modules/.cache/**"
-      - "!node_modules/.bin/**"
+      - "!node_modules{,/**/*}"
+  # node_modules as its own entry, with itself as the "from" root, sidesteps
+  # that check entirely (native modules must be rebuilt for Electron; see
+  # electron/package.json's "rebuild" script).
+  - from: ../server/node_modules
+    to: server/node_modules
+    filter:
+      - "**/*"
+      - "!.cache/**"
+      - "!.bin/**"
 
 directories:
   output: ../dist-electron
