@@ -7,9 +7,10 @@ router.use(requireAuth);
 
 const MAX_PATTERN_LENGTH = 100;
 // Rejects the classic catastrophic-backtracking shapes: nested quantifiers
-// like (a+)+, (a*)*, (a+)*, (a*)+ — cheap defense against a ReDoS rule
-// hanging the server's single event loop on every future CSV import.
-const DANGEROUS_REGEX_SHAPE = /\([^()]*[+*][^()]*\)[+*]/;
+// like (a+)+, (a*)*, (a+)*, (a*)+, and quantified alternation like (a|a)+,
+// (a|ab)* — cheap defense against a ReDoS rule hanging the server's single
+// event loop on every future CSV import.
+const DANGEROUS_REGEX_SHAPE = /\([^()]*[+*][^()]*\)[+*]|\([^()]*\|[^()]*\)[+*]/;
 
 function validatePattern(match_type, pattern) {
   if (typeof pattern !== 'string' || pattern.length === 0) return 'pattern is required';

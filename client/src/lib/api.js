@@ -1,7 +1,12 @@
+// A CORS preflight only succeeds for the server's own origin, so a custom
+// header here proves the request came from this app's own JS — cross-site
+// forms/fetches can't attach it. See server/index.js for the matching check.
+export const CSRF_HEADERS = { 'X-Havoro-Csrf': '1' };
+
 async function request(path, options = {}) {
   const res = await fetch(path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...CSRF_HEADERS, ...(options.headers || {}) },
     ...options,
   });
 
@@ -28,6 +33,7 @@ export const api = {
     return fetch(`/api${path}`, {
       method: 'POST',
       credentials: 'include',
+      headers: CSRF_HEADERS,
       body: formData,
     }).then(async res => {
       const text = await res.text();

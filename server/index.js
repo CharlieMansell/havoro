@@ -52,16 +52,28 @@ app.use(cors({
   credentials: true,
 }));
 
+// Auth is entirely cookie-based (see routes/auth.js), so every mutating
+// request needs an explicit CSRF defense on top of the SameSite=Lax cookie
+// above. A custom header can't be attached to a cross-origin request without
+// a CORS preflight succeeding, and the origin lock above means it never
+// does — so requiring it here is a check only same-origin JS can pass.
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+app.use('/api', (req, res, next) => {
+  if (SAFE_METHODS.has(req.method) || req.headers['x-havoro-csrf']) return next();
+  res.status(403).json({ error: 'Missing CSRF header' });
+});
+
 // Health check (unauthenticated — used by Docker and Electron)
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // General API throttle — /api/auth/login has its own tighter limiter on top of this
-app.use('/api', rateLimit({
+const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-}));
+});
+app.use('/api', generalLimiter);
 
 // Routes
 app.use('/api/auth',         require('./routes/auth'));
@@ -82,11 +94,19 @@ app.use('/api/transfers',    require('./routes/transfers'));
 // Serve built client in production
 if (process.env.NODE_ENV === 'production') {
   const clientDist = process.env.CLIENT_DIST || path.join(__dirname, '../client/dist');
+  // Any request that reaches here already fell through every /api route
+  // above without a response being sent, so reusing the same limiter/store
+  // just means static assets and the SPA fallback below share one budget
+  // with the API instead of being unthrottled.
+  app.use(generalLimiter);
   // index: false — otherwise express.static serves index.html itself for
   // any directory-style request (including "/"), with its own default
   // caching, before the no-store route below ever runs.
   app.use(express.static(clientDist, { index: false }));
-  app.get('*', (req, res) => {
+  // Express 5's router (path-to-regexp v8) rejects a bare '*' — wildcards
+  // must be named. '/*splat' alone doesn't match the bare root path though
+  // (unlike the old '*'), so '/' needs to be listed explicitly alongside it.
+  app.get(['/', '/*splat'], (req, res) => {
     // Electron's disk cache lives in userData and survives app upgrades by
     // design (that's what keeps your data safe) — but without this, a
     // cached copy of the app shell (including whatever CSP/security headers
