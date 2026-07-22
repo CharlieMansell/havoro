@@ -119,9 +119,15 @@ jobs:
         run: npm run build
         working-directory: client
 
-      # Install server deps (production only)
+      # Install server deps (production only). --ignore-scripts skips
+      # better-sqlite3's postinstall (prebuild-install/node-gyp) here - its
+      # binary gets rebuilt from scratch for Electron's ABI by the next step
+      # regardless, and that step's electron-rebuild dependency vendors its
+      # own newer node-gyp (see electron/package-lock.json) rather than the
+      # one bundled with this system Node install, which is what was failing
+      # to recognize the Visual Studio version on the runner.
       - name: Install server deps
-        run: npm ci --omit=dev
+        run: npm ci --omit=dev --ignore-scripts
         working-directory: server
 
       # Install Electron deps
