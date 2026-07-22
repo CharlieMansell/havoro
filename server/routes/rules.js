@@ -17,10 +17,10 @@ function validatePattern(match_type, pattern) {
   if (pattern.length > MAX_PATTERN_LENGTH) return `pattern must be ${MAX_PATTERN_LENGTH} characters or fewer`;
   if (match_type === 'regex') {
     // Cheap defense against a ReDoS rule hanging the server's single event
-    // loop on every future CSV import.
-    if (!safeRegex(pattern) || DANGEROUS_ALTERNATION_SHAPE.test(pattern)) {
-      return 'pattern is too complex and could hang on some inputs (e.g. nested repetition like (a+)+) — simplify it';
-    }
+    // loop on every future CSV import. Kept as separate guard clauses
+    // (rather than combined with ||) so each is its own simple barrier.
+    if (!safeRegex(pattern)) return 'pattern is too complex and could hang on some inputs (e.g. nested repetition like (a+)+) — simplify it';
+    if (DANGEROUS_ALTERNATION_SHAPE.test(pattern)) return 'pattern contains alternation that could hang on some inputs (e.g. (a|a)+) — simplify it';
     try { new RegExp(pattern); } catch { return 'pattern is not a valid regular expression'; }
   }
   return null;

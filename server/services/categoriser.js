@@ -27,7 +27,8 @@ function categorise(description) {
     } else if (rule.match_type === 'startswith') {
       match = lower.startsWith(pat);
     } else if (rule.match_type === 'regex') {
-      if (rule.pattern.length > 100 || !safeRegex(rule.pattern) || DANGEROUS_ALTERNATION_SHAPE.test(rule.pattern)) {
+      const tooComplex = rule.pattern.length > 100 || !safeRegex(rule.pattern) || DANGEROUS_ALTERNATION_SHAPE.test(rule.pattern);
+      if (tooComplex) {
         match = false;
       } else {
         try { match = new RegExp(rule.pattern, 'i').test(description.slice(0, MAX_DESCRIPTION_LENGTH)); }
