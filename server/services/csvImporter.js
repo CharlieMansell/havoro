@@ -13,12 +13,40 @@ function parseAmount(value) {
   return isNaN(num) ? null : (neg ? -num : num);
 }
 
+const MONTH_NAMES = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+// "31 Jul 26" / "31-Jul-2026" — NAB writes the month as a name and the year
+// with two digits, which no split on a single separator can handle. Returns
+// null when the string isn't that shape, so callers can fall through.
+const NAMED_MONTH = /^(\d{1,2})[\s-]+([A-Za-z]{3,})[\s-]+(\d{2}|\d{4})$/;
+function parseNamedMonthDate(str) {
+  const match = str.match(NAMED_MONTH);
+  if (!match) return null;
+
+  const month = MONTH_NAMES[match[2].slice(0, 3).toLowerCase()];
+  if (!month) return null;
+
+  // A two-digit year is this century for anything a bank statement can
+  // plausibly cover; the 70 pivot is the usual POSIX one.
+  let year = Number(match[3]);
+  if (match[3].length === 2) year += year < 70 ? 2000 : 1900;
+
+  return [String(match[1]), String(month), String(year)];
+}
+
 function parseDate(value, format) {
   const str = String(value).trim();
   if (!str) return null;
-  // supported formats: DD/MM/YYYY, YYYY-MM-DD, MM/DD/YYYY, D/M/YYYY
+  // supported formats: DD/MM/YYYY, YYYY-MM-DD, MM/DD/YYYY, D/M/YYYY, DD MMM YY
   let d, m, y;
-  if (format === 'DD/MM/YYYY' || format === 'D/M/YYYY') {
+  if (format === 'DD MMM YY' || format === 'DD MMM YYYY') {
+    const parts = parseNamedMonthDate(str);
+    if (!parts) return str;
+    [d, m, y] = parts;
+  } else if (format === 'DD/MM/YYYY' || format === 'D/M/YYYY') {
     [d, m, y] = str.split('/');
   } else if (format === 'MM/DD/YYYY') {
     [m, d, y] = str.split('/');
@@ -28,7 +56,11 @@ function parseDate(value, format) {
     // attempt auto-detect
     if (/^\d{4}-\d{2}-\d{2}$/.test(str)) { [y, m, d] = str.split('-'); }
     else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) { [d, m, y] = str.split('/'); }
-    else return str;
+    else {
+      const parts = parseNamedMonthDate(str);
+      if (!parts) return str;
+      [d, m, y] = parts;
+    }
   }
   if (!d || !m || !y) return str;
   return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -87,7 +119,18 @@ function parseCSV(buffer, profile) {
     const amount_cents = Math.round(amountFloat * 100);
     if (!date || !description) continue;
 
-    rows.push({ date, description, description_clean: cleanDescription(description), amount_cents });
+    // Some exports carry a tidied merchant name in its own column (NAB's
+    // "Merchant Name"), which beats anything cleanDescription can recover
+    // from the raw statement line — but it's blank on plenty of rows, so
+    // fall back rather than trusting it blindly.
+    const merchant = profile.merchant ? String(rec[profile.merchant.column] ?? '').trim() : '';
+
+    rows.push({
+      date,
+      description,
+      description_clean: merchant || cleanDescription(description),
+      amount_cents,
+    });
   }
   return rows;
 }

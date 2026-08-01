@@ -6,12 +6,11 @@ const { categorise } = require('../services/categoriser');
 const router = express.Router();
 router.use(requireAuth);
 
-// GET /api/transactions
-router.get('/', (req, res) => {
-  const {
-    account_id, category_id, needs_review, is_transfer,
-    date_from, date_to, search, page = 1, limit = 50,
-  } = req.query;
+// Shared by the list and the ids-only endpoint below so the two can never
+// drift: "select all matching these filters" in the UI has to mean exactly
+// the set the list would have shown, or a bulk action hits the wrong rows.
+function buildFilters(query) {
+  const { account_id, category_id, needs_review, is_transfer, date_from, date_to, search } = query;
 
   const where = [];
   const params = [];
@@ -27,7 +26,13 @@ router.get('/', (req, res) => {
     params.push(`%${search}%`, `%${search}%`);
   }
 
-  const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  return { whereClause: where.length ? 'WHERE ' + where.join(' AND ') : '', params };
+}
+
+// GET /api/transactions
+router.get('/', (req, res) => {
+  const { page = 1, limit = 50 } = req.query;
+  const { whereClause, params } = buildFilters(req.query);
   const offset = (Number(page) - 1) * Number(limit);
 
   const total = db.prepare(`
@@ -47,6 +52,16 @@ router.get('/', (req, res) => {
   `).all(...params, Number(limit), offset);
 
   res.json({ total: total.n, page: Number(page), limit: Number(limit), rows });
+});
+
+// GET /api/transactions/ids
+// Every id matching the current filters, ignoring pagination — what "select
+// all N" in the UI selects. The bulk endpoints take explicit ids rather than
+// a filter, so the client needs the whole set, not just the page it can see.
+router.get('/ids', (req, res) => {
+  const { whereClause, params } = buildFilters(req.query);
+  const rows = db.prepare(`SELECT t.id FROM transactions t ${whereClause}`).all(...params);
+  res.json({ ids: rows.map(r => r.id) });
 });
 
 // GET /api/transactions/needs-review/count

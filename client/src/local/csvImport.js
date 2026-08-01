@@ -15,7 +15,8 @@ export const BANK_PROFILES = {
   },
   nab: {
     name: 'NAB — Everyday / Savings', account_match: 'nab', skip_rows: 1,
-    date: { column: 0, format: 'DD/MM/YYYY' }, description: { column: 2 },
+    date: { column: 0, format: 'DD MMM YY' }, description: { column: 4 },
+    merchant: { column: 7 },
     amount: { column: 1, negate: false },
   },
   westpac: {
@@ -61,17 +62,43 @@ function parseAmount(value) {
   return isNaN(num) ? null : (neg ? -num : num);
 }
 
+const MONTH_NAMES = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+// "31 Jul 26" / "31-Jul-2026" — see the note in server/services/csvImporter.js
+const NAMED_MONTH = /^(\d{1,2})[\s-]+([A-Za-z]{3,})[\s-]+(\d{2}|\d{4})$/;
+function parseNamedMonthDate(str) {
+  const match = str.match(NAMED_MONTH);
+  if (!match) return null;
+  const month = MONTH_NAMES[match[2].slice(0, 3).toLowerCase()];
+  if (!month) return null;
+  let year = Number(match[3]);
+  if (match[3].length === 2) year += year < 70 ? 2000 : 1900;
+  return [String(match[1]), String(month), String(year)];
+}
+
 function parseDate(value, format) {
   const str = String(value).trim();
   if (!str) return null;
   let d, m, y;
-  if (format === 'DD/MM/YYYY' || format === 'D/M/YYYY') [d, m, y] = str.split('/');
+  if (format === 'DD MMM YY' || format === 'DD MMM YYYY') {
+    const parts = parseNamedMonthDate(str);
+    if (!parts) return str;
+    [d, m, y] = parts;
+  }
+  else if (format === 'DD/MM/YYYY' || format === 'D/M/YYYY') [d, m, y] = str.split('/');
   else if (format === 'MM/DD/YYYY') [m, d, y] = str.split('/');
   else if (format === 'YYYY-MM-DD') [y, m, d] = str.split('-');
   else {
     if (/^\d{4}-\d{2}-\d{2}$/.test(str)) [y, m, d] = str.split('-');
     else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) [d, m, y] = str.split('/');
-    else return str;
+    else {
+      const parts = parseNamedMonthDate(str);
+      if (!parts) return str;
+      [d, m, y] = parts;
+    }
   }
   if (!d || !m || !y) return str;
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -114,7 +141,15 @@ export function parseBankCSV(text, profile) {
     const amount_cents = Math.round(amountFloat * 100);
     if (!date || !description) continue;
 
-    rows.push({ date, description, description_clean: cleanDescription(description), amount_cents });
+    // Prefer a dedicated merchant-name column when the profile has one
+    const merchant = profile.merchant ? String(rec[profile.merchant.column] ?? '').trim() : '';
+
+    rows.push({
+      date,
+      description,
+      description_clean: merchant || cleanDescription(description),
+      amount_cents,
+    });
   }
   return rows;
 }

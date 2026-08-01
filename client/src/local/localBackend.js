@@ -189,7 +189,7 @@ function budgetsSummary(month) {
   };
 }
 
-function listTransactions(q) {
+function buildFilters(q) {
   const where = [];
   const params = [];
   if (q.get('account_id')) { where.push('t.account_id = ?'); params.push(q.get('account_id')); }
@@ -202,7 +202,11 @@ function listTransactions(q) {
     where.push('(t.description LIKE ? OR t.description_clean LIKE ?)');
     params.push(`%${q.get('search')}%`, `%${q.get('search')}%`);
   }
-  const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  return { whereClause: where.length ? 'WHERE ' + where.join(' AND ') : '', params };
+}
+
+function listTransactions(q) {
+  const { whereClause, params } = buildFilters(q);
   const page = Number(q.get('page') || 1);
   const limit = Number(q.get('limit') || 50);
   const total = get(`SELECT COUNT(*) as n FROM transactions t ${whereClause}`, params);
@@ -312,6 +316,10 @@ function handle(method, path, query, body) {
     return { count: get('SELECT COUNT(*) as n FROM transactions WHERE category_id IS NULL AND is_transfer = 0').n };
 
   if (path === '/transactions' && method === 'GET') return listTransactions(query);
+  if (path === '/transactions/ids' && method === 'GET') {
+    const { whereClause, params } = buildFilters(query);
+    return { ids: all(`SELECT t.id FROM transactions t ${whereClause}`, params).map(r => r.id) };
+  }
   if ((match = m(/^\/transactions\/(\d+)\/suggest-rule$/)) && method === 'POST') {
     const tx = get('SELECT * FROM transactions WHERE id = ?', [match[1]]);
     if (!tx || !tx.category_id) return { error: 'Transaction has no category', status: 400 };
