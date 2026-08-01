@@ -10,7 +10,7 @@ router.use(requireAuth);
 // drift: "select all matching these filters" in the UI has to mean exactly
 // the set the list would have shown, or a bulk action hits the wrong rows.
 function buildFilters(query) {
-  const { account_id, category_id, needs_review, is_transfer, date_from, date_to, search } = query;
+  const { account_id, category_id, needs_review, is_transfer, date_from, date_to, search, bank_category } = query;
 
   const where = [];
   const params = [];
@@ -21,6 +21,7 @@ function buildFilters(query) {
   if (is_transfer !== undefined) { where.push('t.is_transfer = ?'); params.push(is_transfer === 'true' ? 1 : 0); }
   if (date_from) { where.push('t.date >= ?'); params.push(date_from); }
   if (date_to) { where.push('t.date <= ?'); params.push(date_to); }
+  if (bank_category) { where.push('t.bank_category = ?'); params.push(bank_category); }
   if (search) {
     where.push("(t.description LIKE ? OR t.description_clean LIKE ?)");
     params.push(`%${search}%`, `%${search}%`);
@@ -62,6 +63,17 @@ router.get('/ids', (req, res) => {
   const { whereClause, params } = buildFilters(req.query);
   const rows = db.prepare(`SELECT t.id FROM transactions t ${whereClause}`).all(...params);
   res.json({ ids: rows.map(r => r.id) });
+});
+
+// GET /api/transactions/bank-categories
+// The distinct categories the banks themselves assigned, for the filter on
+// the transactions list. Only some banks export one, so this is empty until
+// something that does has been imported — which is what the UI keys off.
+router.get('/bank-categories', (req, res) => {
+  const rows = db.prepare(
+    'SELECT DISTINCT bank_category FROM transactions WHERE bank_category IS NOT NULL AND bank_category != \'\' ORDER BY bank_category'
+  ).all();
+  res.json(rows.map(r => r.bank_category));
 });
 
 // GET /api/transactions/needs-review/count

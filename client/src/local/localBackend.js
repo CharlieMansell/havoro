@@ -198,6 +198,7 @@ function buildFilters(q) {
   if (q.get('is_transfer') != null) { where.push('t.is_transfer = ?'); params.push(q.get('is_transfer') === 'true' ? 1 : 0); }
   if (q.get('date_from')) { where.push('t.date >= ?'); params.push(q.get('date_from')); }
   if (q.get('date_to')) { where.push('t.date <= ?'); params.push(q.get('date_to')); }
+  if (q.get('bank_category')) { where.push('t.bank_category = ?'); params.push(q.get('bank_category')); }
   if (q.get('search')) {
     where.push('(t.description LIKE ? OR t.description_clean LIKE ?)');
     params.push(`%${q.get('search')}%`, `%${q.get('search')}%`);
@@ -325,6 +326,8 @@ function handle(method, path, query, body) {
     return { count: get('SELECT COUNT(*) as n FROM transactions WHERE category_id IS NULL AND is_transfer = 0').n };
 
   if (path === '/transactions' && method === 'GET') return listTransactions(query);
+  if (path === '/transactions/bank-categories' && method === 'GET')
+    return all("SELECT DISTINCT bank_category FROM transactions WHERE bank_category IS NOT NULL AND bank_category != '' ORDER BY bank_category").map(r => r.bank_category);
   if (path === '/transactions/ids' && method === 'GET') {
     const { whereClause, params } = buildFilters(query);
     return { ids: all(`SELECT t.id FROM transactions t ${whereClause}`, params).map(r => r.id) };

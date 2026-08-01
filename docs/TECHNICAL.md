@@ -374,8 +374,9 @@ All endpoints are prefixed `/api/`. Authentication is via an httpOnly cookie set
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/api/transactions` | Yes | Paginated list. Filters: `account_id`, `category_id`, `needs_review`, `is_transfer`, `date_from`, `date_to`, `search`, `page`, `limit` (default 50). |
+| GET | `/api/transactions` | Yes | Paginated list. Filters: `account_id`, `category_id`, `needs_review`, `is_transfer`, `date_from`, `date_to`, `search`, `bank_category`, `page`, `limit` (default 50). |
 | GET | `/api/transactions/ids` | Yes | Ids of every transaction matching the same filters as the list, ignoring pagination. Backs "select all N" in the UI. |
+| GET | `/api/transactions/bank-categories` | Yes | Distinct bank-assigned categories present in the data. Empty until a bank that exports them is imported; the UI hides the filter when so. |
 | GET | `/api/transactions/needs-review/count` | Yes | Count of uncategorised non-transfer transactions. |
 | PUT | `/api/transactions/:id` | Yes | Update category, notes, description_clean, is_transfer. |
 | DELETE | `/api/transactions/:id` | Yes | Permanently delete one transaction. Frees its `import_hash`, so re-importing the source statement restores it. |
