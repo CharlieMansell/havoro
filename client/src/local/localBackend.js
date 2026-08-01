@@ -343,6 +343,14 @@ function handle(method, path, query, body) {
     return { updated: ids.length };
   }
 
+  if (path === '/transactions/bulk-delete' && method === 'POST') {
+    const { ids } = body;
+    if (!Array.isArray(ids) || ids.length === 0) return { error: 'ids must be a non-empty array', status: 400 };
+    const placeholders = ids.map(() => '?').join(',');
+    run(`DELETE FROM transactions WHERE id IN (${placeholders})`, ids);
+    return { deleted: ids.length };
+  }
+
   if (path === '/transactions/apply-rules' && method === 'POST') {
     const rows = all('SELECT id, description, description_clean FROM transactions WHERE category_id IS NULL AND is_transfer = 0');
     let updated = 0;

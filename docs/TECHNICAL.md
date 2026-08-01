@@ -375,6 +375,7 @@ All endpoints are prefixed `/api/`. Authentication is via an httpOnly cookie set
 | GET | `/api/transactions/needs-review/count` | Yes | Count of uncategorised non-transfer transactions. |
 | PUT | `/api/transactions/:id` | Yes | Update category, notes, description_clean, is_transfer. |
 | DELETE | `/api/transactions/:id` | Yes | Permanently delete one transaction. Frees its `import_hash`, so re-importing the source statement restores it. |
+| POST | `/api/transactions/bulk-delete` | Yes | Delete a batch of transactions (`ids` array). Runs as one transaction; returns `{ deleted }`. |
 | POST | `/api/transactions/:id/suggest-rule` | Yes | Return a suggested categorisation rule for this transaction. |
 
 ### Budgets

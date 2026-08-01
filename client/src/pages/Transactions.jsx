@@ -28,6 +28,7 @@ export default function Transactions() {
   const [selected, setSelected] = useState(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState('');
   const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const page = Number(searchParams.get('page') || 1);
   const needsReview = searchParams.get('needs_review') === 'true';
@@ -106,6 +107,21 @@ export default function Transactions() {
     }
   };
 
+  // Clearing out the whole page would otherwise leave the table empty with no
+  // way back except the browser's own Back button, so step back a page instead
+  // of reloading one that no longer has anything on it.
+  const reloadAfterDelete = (removed) => {
+    if (removed >= data.rows.length && page > 1) {
+      setSearchParams(p => {
+        const n = new URLSearchParams(p);
+        n.set('page', page - 1);
+        return n;
+      });
+    } else {
+      load();
+    }
+  };
+
   const deleteTransaction = async (tx) => {
     const ok = await confirm({
       title: 'Delete this transaction?',
@@ -117,19 +133,32 @@ export default function Transactions() {
       await api.delete(`/transactions/${tx.id}`);
       toast.addToast('Transaction deleted');
       setEditing(null);
-      // Deleting the last row of the final page would otherwise leave the
-      // table empty with no way back except the browser's own Back button.
-      if (data.rows.length === 1 && page > 1) {
-        setSearchParams(p => {
-          const n = new URLSearchParams(p);
-          n.set('page', page - 1);
-          return n;
-        });
-      } else {
-        load();
-      }
+      reloadAfterDelete(1);
     } catch (e) {
       toast.addToast(e.message, 'error');
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (selected.size === 0) return;
+    const count = selected.size;
+    const ok = await confirm({
+      title: `Delete ${count} transaction${count === 1 ? '' : 's'}?`,
+      message: 'Re-importing the statements they came from will bring them back.',
+      confirmLabel: `Delete ${count}`,
+    });
+    if (!ok) return;
+
+    setBulkDeleting(true);
+    try {
+      const { deleted } = await api.post('/transactions/bulk-delete', { ids: [...selected] });
+      toast.addToast(`${deleted} transaction${deleted === 1 ? '' : 's'} deleted`);
+      setSelected(new Set());
+      reloadAfterDelete(count);
+    } catch (e) {
+      toast.addToast(e.message, 'error');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -216,6 +245,13 @@ export default function Transactions() {
             {bulkApplying ? 'Applying…' : 'Apply'}
           </button>
           <button className="btn-secondary text-xs" onClick={() => setSelected(new Set())}>Clear selection</button>
+          <button
+            className="btn-secondary text-xs ml-auto text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+            onClick={bulkDelete}
+            disabled={bulkDeleting}
+          >
+            {bulkDeleting ? 'Deleting…' : `Delete ${selected.size}`}
+          </button>
         </div>
       )}
 

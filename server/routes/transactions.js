@@ -80,6 +80,34 @@ router.post('/bulk-categorize', (req, res) => {
   res.json({ updated: result.changes });
 });
 
+// POST /api/transactions/bulk-delete
+// Deletes a batch of transaction ids in one request. Same shape as
+// bulk-categorize above, and the same reasoning as DELETE /:id below for why
+// removing rows outright is safe.
+router.post('/bulk-delete', (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids must be a non-empty array' });
+  }
+
+  // Chunked because SQLite caps how many parameters one statement can bind
+  // (SQLITE_MAX_VARIABLE_NUMBER), which a big selection would otherwise blow
+  // past. The whole thing is one db.transaction, so a failure part-way
+  // through rolls every chunk back rather than leaving half a selection gone.
+  const CHUNK_SIZE = 500;
+  let deleted = 0;
+  const deleteAll = db.transaction((allIds) => {
+    for (let i = 0; i < allIds.length; i += CHUNK_SIZE) {
+      const chunk = allIds.slice(i, i + CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(',');
+      deleted += db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders})`).run(...chunk).changes;
+    }
+  });
+  deleteAll(ids);
+
+  res.json({ deleted });
+});
+
 // POST /api/transactions/apply-rules
 // Re-runs categorisation rules against transactions that don't have a
 // category yet — covers the case where a rule is created or edited after
