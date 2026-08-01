@@ -47,6 +47,12 @@ win:
 
 nsis:
   oneClick: false
+  # Havoro is always a per-user install (%LOCALAPPDATA%\Programs\Havoro).
+  # perMachine: false only picks the default on the "install for..." page —
+  # build/installer.nsh's customInstallMode is what actually removes the
+  # all-users choice, and the reason why is documented there.
+  perMachine: false
+  allowElevation: false
   allowToChangeInstallationDirectory: false
   createDesktopShortcut: true
   createStartMenuShortcut: true

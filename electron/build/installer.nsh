@@ -1,3 +1,22 @@
+!macro customInstallMode
+  ; Install for the current user only, always — no "who should this be
+  ; installed for?" page. Picking "all users" put the app under
+  ; %ProgramFiles%, which the app then runs from unelevated, and anything
+  ; the server touched next to its own files failed with EPERM and took the
+  ; process down on launch. There's nothing to share between accounts
+  ; anyway: the database, backups and JWT secret all live in the per-user
+  ; %APPDATA%\Havoro, so a machine-wide install bought nothing.
+  ; Forcing it here (rather than perMachine: false, which only sets the
+  ; page's default) makes electron-builder's install-mode page skip itself
+  ; and pick $LocalAppData\Programs\Havoro — see multiUserUi.nsh's
+  ; PAGE_INSTALL_MODE pre-function, which checks this flag first.
+  ; Installer only: the uninstaller shares this page, and forcing the mode
+  ; there would point an existing all-users uninstall at the wrong folder.
+  !ifndef BUILD_UNINSTALLER
+    StrCpy $isForceCurrentInstall "1"
+  !endif
+!macroend
+
 !macro customInit
   ; Havoro deliberately keeps running in the tray when its window is closed,
   ; so the installer's default graceful-close (send the window a close

@@ -2,10 +2,17 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DATA_DIR = path.join(__dirname, '../../data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+// Only the fallback location — the packaged desktop app and Docker both set
+// DB_PATH somewhere per-user/persistent instead. Create the directory the
+// database is actually going to live in rather than this one unconditionally:
+// creating it next to the source files fails with EPERM when the app is
+// installed to a read-only location (an all-users Windows install under
+// %ProgramFiles%, run unelevated), killing the server on startup even though
+// DB_PATH pointed somewhere perfectly writable.
+const DEFAULT_DATA_DIR = path.join(__dirname, '../../data');
 
-const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'havoro.db');
+const DB_PATH = process.env.DB_PATH || path.join(DEFAULT_DATA_DIR, 'havoro.db');
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);
 
