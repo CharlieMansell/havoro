@@ -28,6 +28,8 @@ export default function Transactions() {
   const [selected, setSelected] = useState(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState('');
   const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
 
   const page = Number(searchParams.get('page') || 1);
   const needsReview = searchParams.get('needs_review') === 'true';
@@ -37,7 +39,9 @@ export default function Transactions() {
   const dateFrom = searchParams.get('date_from') || '';
   const dateTo = searchParams.get('date_to') || '';
 
-  const load = useCallback(() => {
+  // Everything except paging — the filters that decide *which* transactions
+  // are in play, shared by the list request and "select all matching".
+  const filterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (needsReview) params.set('needs_review', 'true');
     if (search) params.set('search', search);
@@ -45,6 +49,11 @@ export default function Transactions() {
     if (categoryId) params.set('category_id', categoryId);
     if (dateFrom) params.set('date_from', dateFrom);
     if (dateTo) params.set('date_to', dateTo);
+    return params;
+  }, [needsReview, search, accountId, categoryId, dateFrom, dateTo]);
+
+  const load = useCallback(() => {
+    const params = filterParams();
     params.set('page', page);
     params.set('limit', '50');
 
@@ -53,14 +62,16 @@ export default function Transactions() {
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [page, needsReview, search, accountId, categoryId, dateFrom, dateTo]);
+  }, [filterParams, page]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     api.get('/categories').then(setCategories).catch(console.error);
   }, []);
-  // Any filter change invalidates whatever was selected on the previous page/view.
-  useEffect(() => { setSelected(new Set()); }, [page, needsReview, search, accountId, categoryId, dateFrom, dateTo]);
+  // Selection deliberately survives paging, so one batch can span pages — but
+  // a filter change means the selection no longer matches what's on screen.
+  const filterKey = filterParams().toString();
+  useEffect(() => { setSelected(new Set()); }, [filterKey]);
 
   const updateFilter = (key, value) => setSearchParams(p => {
     const n = new URLSearchParams(p);
@@ -106,6 +117,22 @@ export default function Transactions() {
     }
   };
 
+  // Deleting can shrink the list past the page being viewed — reloading that
+  // page would show an empty table with no way back but the browser's own
+  // Back button, so land on the last page that still has rows.
+  const reloadAfterDelete = (removed) => {
+    const lastPage = Math.max(1, Math.ceil(Math.max(0, data.total - removed) / 50));
+    if (page > lastPage) {
+      setSearchParams(p => {
+        const n = new URLSearchParams(p);
+        n.set('page', lastPage);
+        return n;
+      });
+    } else {
+      load();
+    }
+  };
+
   const deleteTransaction = async (tx) => {
     const ok = await confirm({
       title: 'Delete this transaction?',
@@ -117,19 +144,44 @@ export default function Transactions() {
       await api.delete(`/transactions/${tx.id}`);
       toast.addToast('Transaction deleted');
       setEditing(null);
-      // Deleting the last row of the final page would otherwise leave the
-      // table empty with no way back except the browser's own Back button.
-      if (data.rows.length === 1 && page > 1) {
-        setSearchParams(p => {
-          const n = new URLSearchParams(p);
-          n.set('page', page - 1);
-          return n;
-        });
-      } else {
-        load();
-      }
+      reloadAfterDelete(1);
     } catch (e) {
       toast.addToast(e.message, 'error');
+    }
+  };
+
+  const selectAllMatching = async () => {
+    setSelectingAll(true);
+    try {
+      const { ids } = await api.get(`/transactions/ids?${filterParams()}`);
+      setSelected(new Set(ids));
+    } catch (e) {
+      toast.addToast(e.message, 'error');
+    } finally {
+      setSelectingAll(false);
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (selected.size === 0) return;
+    const count = selected.size;
+    const ok = await confirm({
+      title: `Delete ${count} transaction${count === 1 ? '' : 's'}?`,
+      message: 'Re-importing the statements they came from will bring them back.',
+      confirmLabel: `Delete ${count}`,
+    });
+    if (!ok) return;
+
+    setBulkDeleting(true);
+    try {
+      const { deleted } = await api.post('/transactions/bulk-delete', { ids: [...selected] });
+      toast.addToast(`${deleted} transaction${deleted === 1 ? '' : 's'} deleted`);
+      setSelected(new Set());
+      reloadAfterDelete(count);
+    } catch (e) {
+      toast.addToast(e.message, 'error');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -199,7 +251,18 @@ export default function Transactions() {
 
       {selected.size > 0 && (
         <div className="card py-3 flex items-center gap-3 flex-wrap bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800">
-          <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">{selected.size} selected</span>
+          <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
+            {selected.size} selected
+            {selected.size > data.rows.length && <span className="font-normal"> across pages</span>}
+          </span>
+
+          {/* The checkboxes only reach the current page, so anything beyond it
+              has to be selectable in one go for a filtered batch to be usable. */}
+          {selected.size < data.total && (
+            <button className="btn-secondary text-xs" onClick={selectAllMatching} disabled={selectingAll}>
+              {selectingAll ? 'Selecting…' : `Select all ${data.total}`}
+            </button>
+          )}
           <select
             className="input w-48 text-sm"
             value={bulkCategoryId}
@@ -216,6 +279,13 @@ export default function Transactions() {
             {bulkApplying ? 'Applying…' : 'Apply'}
           </button>
           <button className="btn-secondary text-xs" onClick={() => setSelected(new Set())}>Clear selection</button>
+          <button
+            className="btn-secondary text-xs ml-auto text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+            onClick={bulkDelete}
+            disabled={bulkDeleting}
+          >
+            {bulkDeleting ? 'Deleting…' : `Delete ${selected.size}`}
+          </button>
         </div>
       )}
 

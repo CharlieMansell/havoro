@@ -372,9 +372,11 @@ All endpoints are prefixed `/api/`. Authentication is via an httpOnly cookie set
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | GET | `/api/transactions` | Yes | Paginated list. Filters: `account_id`, `category_id`, `needs_review`, `is_transfer`, `date_from`, `date_to`, `search`, `page`, `limit` (default 50). |
+| GET | `/api/transactions/ids` | Yes | Ids of every transaction matching the same filters as the list, ignoring pagination. Backs "select all N" in the UI. |
 | GET | `/api/transactions/needs-review/count` | Yes | Count of uncategorised non-transfer transactions. |
 | PUT | `/api/transactions/:id` | Yes | Update category, notes, description_clean, is_transfer. |
 | DELETE | `/api/transactions/:id` | Yes | Permanently delete one transaction. Frees its `import_hash`, so re-importing the source statement restores it. |
+| POST | `/api/transactions/bulk-delete` | Yes | Delete a batch of transactions (`ids` array). Runs as one transaction; returns `{ deleted }`. |
 | POST | `/api/transactions/:id/suggest-rule` | Yes | Return a suggested categorisation rule for this transaction. |
 
 ### Budgets
@@ -456,29 +458,36 @@ All endpoints are prefixed `/api/`. Authentication is via an httpOnly cookie set
 
 Profiles live in `server/bank-profiles/` as JSON files. Each profile defines how to map CSV columns to Havoro's fields.
 
+Columns are referenced by **zero-based position**, not by header name — banks rename their headers more often than they reorder their columns.
+
 **Example profile structure:**
 
 ```json
 {
-  "id": "anz",
-  "name": "ANZ",
-  "account_match": "ANZ",
-  "date_col": "Date",
-  "date_format": "DD/MM/YYYY",
-  "description_col": "Description",
-  "amount_col": "Amount",
-  "debit_col": null,
-  "credit_col": null
+  "name": "NAB — Everyday / Savings",
+  "account_match": "nab",
+  "encoding": "utf-8",
+  "skip_rows": 1,
+  "date": { "column": 0, "format": "DD MMM YY" },
+  "description": { "column": 4 },
+  "merchant": { "column": 7 },
+  "amount": { "column": 1, "negate": false }
 }
 ```
 
-If your bank exports separate debit/credit columns (rather than a signed amount), use `debit_col` and `credit_col` instead of `amount_col`.
+| Field | Purpose |
+|---|---|
+| `skip_rows` | Header rows to skip before the first transaction (default 1). |
+| `date.format` | One of `DD/MM/YYYY`, `D/M/YYYY`, `MM/DD/YYYY`, `YYYY-MM-DD`, `DD MMM YY`, `DD MMM YYYY`. Anything unrecognised is auto-detected. |
+| `description` | The raw statement line. Also what categorisation rules match against. |
+| `merchant` | *Optional.* A tidied merchant-name column, if the bank exports one — used as the display description when the row has one, falling back to a cleaned-up `description` when it's blank. |
+| `amount` | Signed amount column. Set `negate: true` if the bank writes debits as positive. |
+| `debit_credit` | Use instead of `amount` when the bank splits money in and out across two columns: `{ "debit_column": 1, "credit_column": 3 }`. |
 
 To add a new bank:
 1. Export a sample CSV from your bank
-2. Create a new JSON file in `server/bank-profiles/` matching the column names exactly
-3. Add the profile to the `profiles` array in `server/routes/import.js`
-4. Restart the server
+2. Create a new JSON file in `server/bank-profiles/` — the filename (minus `.json`) becomes the profile id
+3. Restart the server; profiles are picked up by reading the directory, so there's no list to register it in
 
 ---
 
