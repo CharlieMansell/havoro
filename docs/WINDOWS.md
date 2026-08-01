@@ -15,7 +15,7 @@ The GitHub Actions release workflow automatically builds a Windows installer eve
 
 1. Go to the [Releases page](https://github.com/charliemansell/havoro/releases)
 2. Download `Havoro Setup x.x.x.exe` from the latest release
-3. Run the installer — Windows may show a **SmartScreen** warning ("Windows protected your PC") because the app isn't commercially code-signed. Click **More info → Run anyway** to proceed. This is normal for open-source software distributed outside the Microsoft Store.
+3. Run the installer — it installs just for your Windows account, into `%LOCALAPPDATA%\Programs\Havoro`, so it never needs administrator rights. Windows may show a **SmartScreen** warning ("Windows protected your PC") because the app isn't commercially code-signed. Click **More info → Run anyway** to proceed. This is normal for open-source software distributed outside the Microsoft Store.
 4. Launch Havoro; the app opens in a window and also appears in the system tray
 5. First launch asks for your first name (nothing else — no password, no email) and greets you by it from then on. Later launches sign you back in automatically.
 
