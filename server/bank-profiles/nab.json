@@ -6,5 +6,6 @@
   "date": { "column": 0, "format": "DD MMM YY" },
   "description": { "column": 4 },
   "merchant": { "column": 7 },
+  "bank_category": { "column": 6 },
   "amount": { "column": 1, "negate": false }
 }

@@ -132,14 +132,14 @@ router.post('/bulk-delete', (req, res) => {
 // someone picked by hand.
 router.post('/apply-rules', (req, res) => {
   const rows = db.prepare(
-    'SELECT id, description, description_clean FROM transactions WHERE category_id IS NULL AND is_transfer = 0'
+    'SELECT id, description, merchant, bank_category FROM transactions WHERE category_id IS NULL AND is_transfer = 0'
   ).all();
 
   const update = db.prepare('UPDATE transactions SET category_id = ? WHERE id = ?');
   let updated = 0;
   const applyAll = db.transaction((txs) => {
     for (const tx of txs) {
-      const categoryId = categorise(tx.description_clean || tx.description);
+      const categoryId = categorise(tx);
       if (categoryId) { update.run(categoryId, tx.id); updated++; }
     }
   });
@@ -190,14 +190,24 @@ router.post('/:id/suggest-rule', (req, res) => {
   const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
   if (!tx || !tx.category_id) return res.status(400).json({ error: 'Transaction has no category' });
 
-  const desc = (tx.description_clean || tx.description).toLowerCase().trim();
-  // suggest a 'contains' rule based on first meaningful word cluster
-  const words = desc.split(/\s+/).slice(0, 3).join(' ');
+  // Prefer the bank's own fields when it gave us one: a rule on "Woolworths"
+  // matches the merchant column exactly but would miss the raw statement
+  // line it came from ("WW 1234 MELBOURNE"), so the field the pattern is
+  // taken from has to be the field the rule matches against.
+  let match_field = 'description';
+  let source = tx.description;
+  if (tx.bank_category) { match_field = 'bank_category'; source = tx.bank_category; }
+  else if (tx.merchant) { match_field = 'merchant'; source = tx.merchant; }
+
+  const desc = source.toLowerCase().trim();
+  // A whole bank category is one value, not a phrase to trim down.
+  const pattern = match_field === 'bank_category' ? desc : desc.split(/\s+/).slice(0, 3).join(' ');
 
   res.json({
     suggested: {
       match_type: 'contains',
-      pattern: words,
+      match_field,
+      pattern,
       category_id: tx.category_id,
       priority: 50,
     }

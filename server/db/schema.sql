@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS categories (
 CREATE TABLE IF NOT EXISTS category_rules (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   match_type  TEXT    NOT NULL CHECK (match_type IN ('contains','startswith','regex')),
+  match_field TEXT    NOT NULL DEFAULT 'description'
+              CHECK (match_field IN ('description','merchant','bank_category')),
   pattern     TEXT    NOT NULL,
   category_id INTEGER NOT NULL REFERENCES categories(id),
   priority    INTEGER NOT NULL DEFAULT 100,
@@ -60,6 +62,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   date              TEXT    NOT NULL,
   description       TEXT    NOT NULL,
   description_clean TEXT,
+  merchant          TEXT,
+  bank_category     TEXT,
   amount_cents      INTEGER NOT NULL,
   category_id       INTEGER REFERENCES categories(id),
   notes             TEXT,

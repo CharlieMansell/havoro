@@ -2,6 +2,7 @@ const express = require('express');
 const safeRegex = require('safe-regex');
 const db = require('../db/db');
 const { requireAuth } = require('../middleware/auth');
+const { MATCH_FIELDS } = require('../services/categoriser');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -37,16 +38,19 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { match_type, pattern, category_id, priority = 100, active = 1 } = req.body;
+  const { match_type, pattern, category_id, priority = 100, active = 1, match_field = 'description' } = req.body;
   if (!match_type || !pattern || !category_id) {
     return res.status(400).json({ error: 'match_type, pattern and category_id required' });
+  }
+  if (!MATCH_FIELDS.includes(match_field)) {
+    return res.status(400).json({ error: `match_field must be one of: ${MATCH_FIELDS.join(', ')}` });
   }
   const patternError = validatePattern(match_type, pattern);
   if (patternError) return res.status(400).json({ error: patternError });
 
   const { lastInsertRowid } = db.prepare(
-    'INSERT INTO category_rules (match_type, pattern, category_id, priority, active) VALUES (?, ?, ?, ?, ?)'
-  ).run(match_type, pattern, category_id, priority, active ? 1 : 0);
+    'INSERT INTO category_rules (match_type, pattern, category_id, priority, active, match_field) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(match_type, pattern, category_id, priority, active ? 1 : 0, match_field);
 
   res.status(201).json(db.prepare('SELECT * FROM category_rules WHERE id = ?').get(lastInsertRowid));
 });
@@ -55,9 +59,13 @@ router.put('/:id', (req, res) => {
   const existing = db.prepare('SELECT match_type, pattern FROM category_rules WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Rule not found' });
 
-  const allowed = ['match_type','pattern','category_id','priority','active'];
+  const allowed = ['match_type','pattern','category_id','priority','active','match_field'];
   const fields = Object.keys(req.body).filter(k => allowed.includes(k));
   if (!fields.length) return res.status(400).json({ error: 'No valid fields' });
+
+  if (fields.includes('match_field') && !MATCH_FIELDS.includes(req.body.match_field)) {
+    return res.status(400).json({ error: `match_field must be one of: ${MATCH_FIELDS.join(', ')}` });
+  }
 
   if (fields.includes('match_type') || fields.includes('pattern')) {
     const nextMatchType = req.body.match_type ?? existing.match_type;

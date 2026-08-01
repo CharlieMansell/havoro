@@ -3,7 +3,8 @@
   "account_match": "westpac",
   "encoding": "utf-8",
   "skip_rows": 1,
-  "date": { "column": 0, "format": "DD/MM/YYYY" },
-  "description": { "column": 1 },
-  "debit_credit": { "debit_column": 2, "credit_column": 3 }
+  "date": { "column": 1, "format": "D/M/YYYY" },
+  "description": { "column": 2 },
+  "bank_category": { "column": 6 },
+  "debit_credit": { "debit_column": 3, "credit_column": 4 }
 }

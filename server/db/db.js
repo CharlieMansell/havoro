@@ -25,6 +25,13 @@ try { db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0'
 try { db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'"); } catch {}
 try { db.exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'"); } catch {}
 db.exec("UPDATE users SET role = 'admin' WHERE is_admin = 1 AND role = 'member'");
+// Columns some bank exports provide beyond the raw statement line, and the
+// field a rule matches against. No CHECK on match_field here — SQLite can't
+// add one to an existing table, so routes/rules.js validates it instead;
+// schema.sql has the constraint for fresh databases.
+try { db.exec('ALTER TABLE transactions ADD COLUMN merchant TEXT'); } catch {}
+try { db.exec('ALTER TABLE transactions ADD COLUMN bank_category TEXT'); } catch {}
+try { db.exec("ALTER TABLE category_rules ADD COLUMN match_field TEXT NOT NULL DEFAULT 'description'"); } catch {}
 try {
   db.exec(`CREATE TABLE IF NOT EXISTS transfer_plans (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

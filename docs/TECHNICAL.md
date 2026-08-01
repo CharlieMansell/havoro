@@ -145,7 +145,8 @@ No row is seeded on first run — the table starts empty, and `POST /api/auth/se
 |---|---|---|
 | id | INTEGER PK | |
 | match_type | TEXT | `contains`, `startswith`, `regex` |
-| pattern | TEXT | String or regex to match against transaction description |
+| match_field | TEXT | Which field the pattern is tested against: `description` (default), `merchant`, `bank_category` |
+| pattern | TEXT | String or regex to match against the chosen field |
 | category_id | INTEGER FK | |
 | priority | INTEGER | Lower = higher priority; first match wins |
 | active | INTEGER | 1 = enabled |
@@ -161,7 +162,9 @@ No row is seeded on first run — the table starts empty, and `POST /api/auth/se
 | account_id | INTEGER FK | |
 | date | TEXT | `YYYY-MM-DD` |
 | description | TEXT | Raw from CSV |
-| description_clean | TEXT | User-edited clean description |
+| description_clean | TEXT | Display description — the merchant column when the bank exports one, otherwise a cleaned-up `description` |
+| merchant | TEXT | Merchant name or payment reference, where the bank exports one |
+| bank_category | TEXT | The bank's own categorisation, where it exports one |
 | amount_cents | INTEGER | Signed (negative = debit) |
 | category_id | INTEGER FK | NULL = uncategorised |
 | notes | TEXT | User notes |
@@ -477,12 +480,24 @@ Columns are referenced by **zero-based position**, not by header name — banks 
 
 | Field | Purpose |
 |---|---|
-| `skip_rows` | Header rows to skip before the first transaction (default 1). |
+| `skip_rows` | Header rows to skip before the first transaction (default 1). **Set `0` for exports with no header row** — ANZ and CommBank both start straight at the first transaction. |
 | `date.format` | One of `DD/MM/YYYY`, `D/M/YYYY`, `MM/DD/YYYY`, `YYYY-MM-DD`, `DD MMM YY`, `DD MMM YYYY`. Anything unrecognised is auto-detected. |
-| `description` | The raw statement line. Also what categorisation rules match against. |
-| `merchant` | *Optional.* A tidied merchant-name column, if the bank exports one — used as the display description when the row has one, falling back to a cleaned-up `description` when it's blank. |
+| `description` | The raw statement line. What a rule matches when its `match_field` is `description`. |
+| `merchant` | *Optional.* A tidied merchant name or payment reference, if the bank exports one — used as the display description when the row has one, falling back to a cleaned-up `description` when it's blank. Matchable as `merchant`. |
+| `bank_category` | *Optional.* The bank's own category for the row, kept verbatim. Matchable as `bank_category`, which maps a whole bank category to a Havoro one in a single rule. |
 | `amount` | Signed amount column. Set `negate: true` if the bank writes debits as positive. |
 | `debit_credit` | Use instead of `amount` when the bank splits money in and out across two columns: `{ "debit_column": 1, "credit_column": 3 }`. |
+
+**The four bundled profiles**, each verified against a real export:
+
+| Bank | Header row | Columns | Notes |
+|---|---|---|---|
+| ANZ | none (`skip_rows: 0`) | Date, Amount, Description, From, To, —, —, Reference | Signed amount. The trailing reference column is the payer's own note ("Spotify"), mapped to `merchant`. |
+| CommBank | none (`skip_rows: 0`) | Date, Amount, Description, Balance | Signed amount. No merchant or category column. |
+| NAB | yes | Date, Amount, Account Number, Transaction Type, Transaction Details, Balance, Category, Merchant Name, Processed On | Dates are `31 Jul 26`. Description is Transaction Details, not the account number in column 2. |
+| Westpac | yes | Bank Account, Date, Narrative, Debit Amount, Credit Amount, Balance, Categories, Serial | Leading account-number column shifts everything right by one. Separate debit/credit columns. |
+
+Always confirm against a real export before trusting a profile — every one of these four was wrong at some point in a way that silently mangled imports rather than failing loudly.
 
 To add a new bank:
 1. Export a sample CSV from your bank

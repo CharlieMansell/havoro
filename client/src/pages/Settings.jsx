@@ -299,7 +299,16 @@ const MATCH_TYPES = [
   { value: 'regex',      label: 'Regex'       },
 ];
 
-const BLANK_RULE = { match_type: 'contains', pattern: '', category_id: '', priority: 50 };
+// Which field on the transaction the pattern is tested against. Banks differ
+// in what they export: NAB sends a merchant name and its own category, ANZ a
+// payment reference, CommBank only the statement line.
+const MATCH_FIELDS = [
+  { value: 'description',   label: 'Description'   },
+  { value: 'merchant',      label: 'Merchant'      },
+  { value: 'bank_category', label: 'Bank category' },
+];
+
+const BLANK_RULE = { match_type: 'contains', match_field: 'description', pattern: '', category_id: '', priority: 50 };
 
 function RuleForm({ initial, categories, onSave, onCancel }) {
   const [form, setForm] = useState(initial || BLANK_RULE);
@@ -309,7 +318,13 @@ function RuleForm({ initial, categories, onSave, onCancel }) {
   const childrenOf = pid => categories.filter(c => c.parent_id === pid);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto_auto] gap-2 items-end bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg p-3">
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_1fr_auto_auto] gap-2 items-end bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg p-3">
+      <div>
+        <label className="label text-xs">Match on</label>
+        <select className="input text-sm" value={form.match_field || 'description'} onChange={e => f('match_field')(e.target.value)}>
+          {MATCH_FIELDS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
+      </div>
       <div>
         <label className="label text-xs">Match type</label>
         <select className="input text-sm" value={form.match_type} onChange={e => f('match_type')(e.target.value)}>
@@ -435,7 +450,7 @@ function RulesPanel({ toast, confirm }) {
               {editingId === r.id ? (
                 <div className="py-2">
                   <RuleForm
-                    initial={{ match_type: r.match_type, pattern: r.pattern, category_id: String(r.category_id), priority: r.priority }}
+                    initial={{ match_type: r.match_type, match_field: r.match_field || 'description', pattern: r.pattern, category_id: String(r.category_id), priority: r.priority }}
                     categories={categories}
                     onSave={saveEdit}
                     onCancel={() => setEditingId(null)}
@@ -445,7 +460,11 @@ function RulesPanel({ toast, confirm }) {
                 <div className={`py-3 flex items-center gap-3 flex-wrap ${!r.active ? 'opacity-40' : ''}`}>
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ background: r.category_color || '#94a3b8' }} />
                   <div className="flex-1 min-w-0 text-sm">
-                    <span className="text-slate-400 dark:text-slate-500 text-xs mr-2">{MATCH_TYPES.find(m => m.value === r.match_type)?.label ?? r.match_type}</span><wbr />
+                    <span className="text-slate-400 dark:text-slate-500 text-xs mr-2">
+                      {MATCH_FIELDS.find(m => m.value === (r.match_field || 'description'))?.label ?? r.match_field}
+                      {' · '}
+                      {MATCH_TYPES.find(m => m.value === r.match_type)?.label ?? r.match_type}
+                    </span><wbr />
                     <span className="font-mono bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded text-xs">{r.pattern}</span><wbr />
                     <span className="text-slate-400 dark:text-slate-500 mx-2 text-xs uppercase tracking-wide">maps to</span><wbr />
                     <span className="text-slate-700 dark:text-slate-200">{r.category_name}</span><wbr />
