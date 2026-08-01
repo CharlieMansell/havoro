@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { formatCents, formatDate } from '../lib/utils';
 import Modal from '../components/Modal';
 import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../components/ConfirmDialog';
 import { SkTableRows } from '../components/Skeleton';
 
 function CategoryBadge({ name, color }) {
@@ -17,6 +18,7 @@ function CategoryBadge({ name, color }) {
 
 export default function Transactions() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState({ rows: [], total: 0 });
   const [categories, setCategories] = useState([]);
@@ -101,6 +103,33 @@ export default function Transactions() {
     if (categoryId) {
       const sug = await api.post(`/transactions/${tx.id}/suggest-rule`, {}).catch(() => null);
       if (sug?.suggested) setSuggestRule({ tx, suggested: sug.suggested });
+    }
+  };
+
+  const deleteTransaction = async (tx) => {
+    const ok = await confirm({
+      title: 'Delete this transaction?',
+      message: `${tx.description_clean || tx.description} · ${formatCents(tx.amount_cents)}. Re-importing the statement it came from will bring it back.`,
+    });
+    if (!ok) return;
+
+    try {
+      await api.delete(`/transactions/${tx.id}`);
+      toast.addToast('Transaction deleted');
+      setEditing(null);
+      // Deleting the last row of the final page would otherwise leave the
+      // table empty with no way back except the browser's own Back button.
+      if (data.rows.length === 1 && page > 1) {
+        setSearchParams(p => {
+          const n = new URLSearchParams(p);
+          n.set('page', page - 1);
+          return n;
+        });
+      } else {
+        load();
+      }
+    } catch (e) {
+      toast.addToast(e.message, 'error');
     }
   };
 
@@ -301,6 +330,12 @@ export default function Transactions() {
             </div>
 
             <div className="flex gap-2 justify-end pt-2">
+              <button
+                className="btn-secondary mr-auto text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                onClick={() => deleteTransaction(editing)}
+              >
+                Delete
+              </button>
               <button className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
               <button
                 className="btn-primary"
