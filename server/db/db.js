@@ -32,6 +32,10 @@ db.exec("UPDATE users SET role = 'admin' WHERE is_admin = 1 AND role = 'member'"
 try { db.exec('ALTER TABLE transactions ADD COLUMN merchant TEXT'); } catch {}
 try { db.exec('ALTER TABLE transactions ADD COLUMN bank_category TEXT'); } catch {}
 try { db.exec("ALTER TABLE category_rules ADD COLUMN match_field TEXT NOT NULL DEFAULT 'description'"); } catch {}
+// NULL = applies to every account, which is what every pre-existing rule
+// becomes. No REFERENCES on the added column: SQLite can't add a foreign key
+// to an existing table, so routes/rules.js checks the account exists instead.
+try { db.exec('ALTER TABLE category_rules ADD COLUMN account_id INTEGER'); } catch {}
 try {
   db.exec(`CREATE TABLE IF NOT EXISTS transfer_plans (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

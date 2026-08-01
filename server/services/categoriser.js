@@ -36,6 +36,11 @@ function categorise(transaction) {
   const rules = getRules();
 
   for (const rule of rules) {
+    // A rule with no account applies everywhere; one scoped to an account
+    // only fires on that account's transactions. Without this, a bank
+    // category as generic as "PAYMENT" would catch other banks' rows too.
+    if (rule.account_id != null && Number(rule.account_id) !== Number(tx.account_id)) continue;
+
     const description = fieldText(tx, rule.match_field);
     if (!description) continue;
 

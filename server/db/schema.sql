@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS category_rules (
   match_type  TEXT    NOT NULL CHECK (match_type IN ('contains','startswith','regex')),
   match_field TEXT    NOT NULL DEFAULT 'description'
               CHECK (match_field IN ('description','merchant','bank_category')),
+  account_id  INTEGER REFERENCES accounts(id),
   pattern     TEXT    NOT NULL,
   category_id INTEGER NOT NULL REFERENCES categories(id),
   priority    INTEGER NOT NULL DEFAULT 100,

@@ -146,12 +146,15 @@ No row is seeded on first run — the table starts empty, and `POST /api/auth/se
 | id | INTEGER PK | |
 | match_type | TEXT | `contains`, `startswith`, `regex` |
 | match_field | TEXT | Which field the pattern is tested against: `description` (default), `merchant`, `bank_category` |
+| account_id | INTEGER FK | Optional. NULL = applies to every account; set = only that account's transactions |
 | pattern | TEXT | String or regex to match against the chosen field |
 | category_id | INTEGER FK | |
 | priority | INTEGER | Lower = higher priority; first match wins |
 | active | INTEGER | 1 = enabled |
 
-20 starter rules seeded (Woolworths→Groceries, Netflix→Subscriptions, etc.).
+20 starter rules seeded (Woolworths→Groceries, Netflix→Subscriptions, etc.), all unscoped.
+
+Scoping matters once several banks are imported: their `bank_category` vocabularies overlap (Westpac's `PAYMENT` against NAB's `Payments`), so a rule written for one bank's categories should be pinned to that bank's account.
 
 ---
 
@@ -366,8 +369,8 @@ All endpoints are prefixed `/api/`. Authentication is via an httpOnly cookie set
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | GET | `/api/rules` | Yes | List all rules. |
-| POST | `/api/rules` | Yes | Create rule. |
-| PUT | `/api/rules/:id` | Yes | Update rule. |
+| POST | `/api/rules` | Yes | Create rule. Optional `match_field` and `account_id`; an unknown `account_id` is rejected with 400. |
+| PUT | `/api/rules/:id` | Yes | Update rule. Send `account_id: ""` or `null` to unscope it. |
 | DELETE | `/api/rules/:id` | Yes | Delete rule. |
 
 ### Transactions

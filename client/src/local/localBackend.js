@@ -245,6 +245,7 @@ function categorise(transaction) {
   const tx = typeof transaction === 'string' ? { description: transaction } : transaction;
   const rules = all('SELECT * FROM category_rules WHERE active = 1 ORDER BY priority ASC, id ASC');
   for (const rule of rules) {
+    if (rule.account_id != null && Number(rule.account_id) !== Number(tx.account_id)) continue;
     const description = fieldText(tx, rule.match_field);
     if (!description) continue;
     const lower = description.toLowerCase();
@@ -297,7 +298,7 @@ async function handleUpload(path, form) {
   for (const row of parsed) {
     const hash = await importHash(accountId, row.date, row.description, row.amount_cents);
     if (get('SELECT id FROM transactions WHERE import_hash = ?', [hash])) { results.duplicates++; continue; }
-    const catId = row.is_transfer ? null : categorise(row);
+    const catId = row.is_transfer ? null : categorise({ ...row, account_id: accountId });
     if (!catId && !row.is_transfer) results.needsReview++;
     // raw db.run in the loop; persist once at the end (persist() per row is slow)
     db.run(`INSERT OR IGNORE INTO transactions
@@ -377,7 +378,7 @@ function handle(method, path, query, body) {
   }
 
   if (path === '/transactions/apply-rules' && method === 'POST') {
-    const rows = all('SELECT id, description, description_clean FROM transactions WHERE category_id IS NULL AND is_transfer = 0');
+    const rows = all('SELECT id, account_id, description, merchant, bank_category FROM transactions WHERE category_id IS NULL AND is_transfer = 0');
     let updated = 0;
     for (const tx of rows) {
       const categoryId = categorise(tx);
@@ -495,15 +496,17 @@ function handle(method, path, query, body) {
       GROUP BY ci.id ORDER BY ci.date DESC`);
 
   if (path === '/rules' && method === 'GET')
-    return all(`SELECT r.*, c.name as category_name, c.color as category_color FROM category_rules r
-      JOIN categories c ON c.id = r.category_id ORDER BY r.priority, r.id`);
+    return all(`SELECT r.*, c.name as category_name, c.color as category_color, a.name as account_name
+      FROM category_rules r JOIN categories c ON c.id = r.category_id
+      LEFT JOIN accounts a ON a.id = r.account_id ORDER BY r.priority, r.id`);
   if (path === '/rules' && method === 'POST') {
-    const { lastInsertRowid } = run('INSERT INTO category_rules (match_type, pattern, category_id, priority, match_field) VALUES (?, ?, ?, ?, ?)',
-      [body.match_type, body.pattern, body.category_id, body.priority ?? 50, body.match_field || 'description']);
+    const { lastInsertRowid } = run('INSERT INTO category_rules (match_type, pattern, category_id, priority, match_field, account_id) VALUES (?, ?, ?, ?, ?, ?)',
+      [body.match_type, body.pattern, body.category_id, body.priority ?? 50, body.match_field || 'description',
+       body.account_id === '' || body.account_id == null ? null : Number(body.account_id)]);
     return get('SELECT * FROM category_rules WHERE id = ?', [lastInsertRowid]);
   }
   if ((match = m(/^\/rules\/(\d+)$/)) && method === 'PUT')
-    return updateAllowed('category_rules', match[1], body, ['match_type', 'pattern', 'category_id', 'priority', 'active', 'match_field']);
+    return updateAllowed('category_rules', match[1], body, ['match_type', 'pattern', 'category_id', 'priority', 'active', 'match_field', 'account_id']);
   if ((match = m(/^\/rules\/(\d+)$/)) && method === 'DELETE') { run('DELETE FROM category_rules WHERE id = ?', [match[1]]); return { ok: true }; }
 
   if (path === '/settings' && method === 'GET')

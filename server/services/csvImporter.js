@@ -180,7 +180,7 @@ function importCSV(buffer, profile, accountId) {
       const exists = db.prepare('SELECT id FROM transactions WHERE import_hash = ?').get(hash);
       if (exists) { results.duplicates++; continue; }
 
-      const catId = row.is_transfer ? null : categorise(row);
+      const catId = row.is_transfer ? null : categorise({ ...row, account_id: accountId });
       if (!catId && !row.is_transfer) results.needsReview++;
 
       insertStmt.run(

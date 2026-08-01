@@ -144,7 +144,7 @@ router.post('/bulk-delete', (req, res) => {
 // someone picked by hand.
 router.post('/apply-rules', (req, res) => {
   const rows = db.prepare(
-    'SELECT id, description, merchant, bank_category FROM transactions WHERE category_id IS NULL AND is_transfer = 0'
+    'SELECT id, account_id, description, merchant, bank_category FROM transactions WHERE category_id IS NULL AND is_transfer = 0'
   ).all();
 
   const update = db.prepare('UPDATE transactions SET category_id = ? WHERE id = ?');

@@ -308,9 +308,9 @@ const MATCH_FIELDS = [
   { value: 'bank_category', label: 'Bank category' },
 ];
 
-const BLANK_RULE = { match_type: 'contains', match_field: 'description', pattern: '', category_id: '', priority: 50 };
+const BLANK_RULE = { match_type: 'contains', match_field: 'description', pattern: '', category_id: '', priority: 50, account_id: '' };
 
-function RuleForm({ initial, categories, onSave, onCancel }) {
+function RuleForm({ initial, categories, accounts, onSave, onCancel }) {
   const [form, setForm] = useState(initial || BLANK_RULE);
   const f = k => v => setForm(p => ({ ...p, [k]: v }));
 
@@ -318,7 +318,7 @@ function RuleForm({ initial, categories, onSave, onCancel }) {
   const childrenOf = pid => categories.filter(c => c.parent_id === pid);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_1fr_auto_auto] gap-2 items-end bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg p-3">
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto_auto] gap-2 items-end bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg p-3">
       <div>
         <label className="label text-xs">Match on</label>
         <select className="input text-sm" value={form.match_field || 'description'} onChange={e => f('match_field')(e.target.value)}>
@@ -346,6 +346,13 @@ function RuleForm({ initial, categories, onSave, onCancel }) {
           ))}
         </select>
       </div>
+      <div>
+        <label className="label text-xs">Account</label>
+        <select className="input text-sm" value={form.account_id ?? ''} onChange={e => f('account_id')(e.target.value)}>
+          <option value="">All accounts</option>
+          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </div>
       <div className="w-20">
         <label className="label text-xs">Priority</label>
         <input type="number" className="input text-sm" min="1" max="999" value={form.priority} onChange={e => f('priority')(parseInt(e.target.value) || 50)} />
@@ -361,6 +368,7 @@ function RuleForm({ initial, categories, onSave, onCancel }) {
 function RulesPanel({ toast, confirm }) {
   const [rules, setRules] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [applying, setApplying] = useState(false);
@@ -371,6 +379,7 @@ function RulesPanel({ toast, confirm }) {
   useEffect(() => {
     load();
     api.get('/categories').then(setCategories).catch(console.error);
+    api.get('/accounts').then(setAccounts).catch(console.error);
   }, []);
 
   const toggle = async (rule) => {
@@ -438,7 +447,7 @@ function RulesPanel({ toast, confirm }) {
       </div>
 
       {showAdd && (
-        <RuleForm categories={categories} onSave={saveNew} onCancel={() => setShowAdd(false)} />
+        <RuleForm categories={categories} accounts={accounts} onSave={saveNew} onCancel={() => setShowAdd(false)} />
       )}
 
       {rules.length === 0 && !showAdd ? (
@@ -450,8 +459,8 @@ function RulesPanel({ toast, confirm }) {
               {editingId === r.id ? (
                 <div className="py-2">
                   <RuleForm
-                    initial={{ match_type: r.match_type, match_field: r.match_field || 'description', pattern: r.pattern, category_id: String(r.category_id), priority: r.priority }}
-                    categories={categories}
+                    initial={{ match_type: r.match_type, match_field: r.match_field || 'description', pattern: r.pattern, category_id: String(r.category_id), priority: r.priority, account_id: r.account_id ? String(r.account_id) : '' }}
+                    categories={categories} accounts={accounts}
                     onSave={saveEdit}
                     onCancel={() => setEditingId(null)}
                   />
@@ -468,6 +477,9 @@ function RulesPanel({ toast, confirm }) {
                     <span className="font-mono bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded text-xs">{r.pattern}</span><wbr />
                     <span className="text-slate-400 dark:text-slate-500 mx-2 text-xs uppercase tracking-wide">maps to</span><wbr />
                     <span className="text-slate-700 dark:text-slate-200">{r.category_name}</span><wbr />
+                    {r.account_name && (
+                      <span className="text-slate-400 dark:text-slate-500 ml-2 text-xs">on {r.account_name}</span>
+                    )}
                     <span className="text-slate-300 dark:text-slate-600 ml-2 text-xs">p{r.priority}</span>
                   </div>
                   <div className="flex gap-1 shrink-0">
