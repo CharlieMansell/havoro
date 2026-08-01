@@ -126,6 +126,21 @@ router.put('/:id', (req, res) => {
   res.json(tx);
 });
 
+// DELETE /api/transactions/:id
+// A real delete, not an archive flag: account balances are tracked on the
+// account itself (check-ins / manual entry), never summed from transactions,
+// and nothing else references a transaction row, so there's nothing left
+// dangling. Dropping the row also frees its import_hash, which means
+// re-importing the same statement brings the transaction back rather than
+// skipping it as a duplicate — the way out if someone deletes one by mistake.
+router.delete('/:id', (req, res) => {
+  const tx = db.prepare('SELECT id FROM transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+
+  db.prepare('DELETE FROM transactions WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 // POST /api/transactions/:id/suggest-rule
 // After manually categorising, suggest creating a rule
 router.post('/:id/suggest-rule', (req, res) => {

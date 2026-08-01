@@ -321,6 +321,14 @@ function handle(method, path, query, body) {
   if ((match = m(/^\/transactions\/(\d+)$/)) && method === 'PUT')
     return updateAllowed('transactions', match[1], body, ['category_id', 'notes', 'is_transfer', 'description_clean']);
 
+  if ((match = m(/^\/transactions\/(\d+)$/)) && method === 'DELETE') {
+    if (!get('SELECT id FROM transactions WHERE id = ?', [match[1]])) {
+      return { error: 'Transaction not found', status: 404 };
+    }
+    run('DELETE FROM transactions WHERE id = ?', [match[1]]);
+    return { ok: true };
+  }
+
   if (path === '/transactions/bulk-categorize' && method === 'POST') {
     const { ids, category_id, is_transfer } = body;
     if (!Array.isArray(ids) || ids.length === 0) return { error: 'ids must be a non-empty array', status: 400 };
