@@ -10,7 +10,7 @@ router.use(requireAuth);
 // drift: "select all matching these filters" in the UI has to mean exactly
 // the set the list would have shown, or a bulk action hits the wrong rows.
 function buildFilters(query) {
-  const { account_id, category_id, needs_review, is_transfer, date_from, date_to, search } = query;
+  const { account_id, category_id, needs_review, is_transfer, date_from, date_to, search, bank_category } = query;
 
   const where = [];
   const params = [];
@@ -21,6 +21,7 @@ function buildFilters(query) {
   if (is_transfer !== undefined) { where.push('t.is_transfer = ?'); params.push(is_transfer === 'true' ? 1 : 0); }
   if (date_from) { where.push('t.date >= ?'); params.push(date_from); }
   if (date_to) { where.push('t.date <= ?'); params.push(date_to); }
+  if (bank_category) { where.push('t.bank_category = ?'); params.push(bank_category); }
   if (search) {
     where.push("(t.description LIKE ? OR t.description_clean LIKE ?)");
     params.push(`%${search}%`, `%${search}%`);
@@ -62,6 +63,17 @@ router.get('/ids', (req, res) => {
   const { whereClause, params } = buildFilters(req.query);
   const rows = db.prepare(`SELECT t.id FROM transactions t ${whereClause}`).all(...params);
   res.json({ ids: rows.map(r => r.id) });
+});
+
+// GET /api/transactions/bank-categories
+// The distinct categories the banks themselves assigned, for the filter on
+// the transactions list. Only some banks export one, so this is empty until
+// something that does has been imported — which is what the UI keys off.
+router.get('/bank-categories', (req, res) => {
+  const rows = db.prepare(
+    'SELECT DISTINCT bank_category FROM transactions WHERE bank_category IS NOT NULL AND bank_category != \'\' ORDER BY bank_category'
+  ).all();
+  res.json(rows.map(r => r.bank_category));
 });
 
 // GET /api/transactions/needs-review/count
@@ -132,14 +144,14 @@ router.post('/bulk-delete', (req, res) => {
 // someone picked by hand.
 router.post('/apply-rules', (req, res) => {
   const rows = db.prepare(
-    'SELECT id, description, description_clean FROM transactions WHERE category_id IS NULL AND is_transfer = 0'
+    'SELECT id, account_id, description, merchant, bank_category FROM transactions WHERE category_id IS NULL AND is_transfer = 0'
   ).all();
 
   const update = db.prepare('UPDATE transactions SET category_id = ? WHERE id = ?');
   let updated = 0;
   const applyAll = db.transaction((txs) => {
     for (const tx of txs) {
-      const categoryId = categorise(tx.description_clean || tx.description);
+      const categoryId = categorise(tx);
       if (categoryId) { update.run(categoryId, tx.id); updated++; }
     }
   });
@@ -190,14 +202,24 @@ router.post('/:id/suggest-rule', (req, res) => {
   const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
   if (!tx || !tx.category_id) return res.status(400).json({ error: 'Transaction has no category' });
 
-  const desc = (tx.description_clean || tx.description).toLowerCase().trim();
-  // suggest a 'contains' rule based on first meaningful word cluster
-  const words = desc.split(/\s+/).slice(0, 3).join(' ');
+  // Prefer the bank's own fields when it gave us one: a rule on "Woolworths"
+  // matches the merchant column exactly but would miss the raw statement
+  // line it came from ("WW 1234 MELBOURNE"), so the field the pattern is
+  // taken from has to be the field the rule matches against.
+  let match_field = 'description';
+  let source = tx.description;
+  if (tx.bank_category) { match_field = 'bank_category'; source = tx.bank_category; }
+  else if (tx.merchant) { match_field = 'merchant'; source = tx.merchant; }
+
+  const desc = source.toLowerCase().trim();
+  // A whole bank category is one value, not a phrase to trim down.
+  const pattern = match_field === 'bank_category' ? desc : desc.split(/\s+/).slice(0, 3).join(' ');
 
   res.json({
     suggested: {
       match_type: 'contains',
-      pattern: words,
+      match_field,
+      pattern,
       category_id: tx.category_id,
       priority: 50,
     }

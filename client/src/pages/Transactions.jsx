@@ -30,6 +30,7 @@ export default function Transactions() {
   const [bulkApplying, setBulkApplying] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
+  const [bankCategories, setBankCategories] = useState([]);
 
   const page = Number(searchParams.get('page') || 1);
   const needsReview = searchParams.get('needs_review') === 'true';
@@ -38,6 +39,7 @@ export default function Transactions() {
   const categoryId = searchParams.get('category_id') || '';
   const dateFrom = searchParams.get('date_from') || '';
   const dateTo = searchParams.get('date_to') || '';
+  const bankCategory = searchParams.get('bank_category') || '';
 
   // Everything except paging — the filters that decide *which* transactions
   // are in play, shared by the list request and "select all matching".
@@ -49,8 +51,9 @@ export default function Transactions() {
     if (categoryId) params.set('category_id', categoryId);
     if (dateFrom) params.set('date_from', dateFrom);
     if (dateTo) params.set('date_to', dateTo);
+    if (bankCategory) params.set('bank_category', bankCategory);
     return params;
-  }, [needsReview, search, accountId, categoryId, dateFrom, dateTo]);
+  }, [needsReview, search, accountId, categoryId, dateFrom, dateTo, bankCategory]);
 
   const load = useCallback(() => {
     const params = filterParams();
@@ -67,6 +70,9 @@ export default function Transactions() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     api.get('/categories').then(setCategories).catch(console.error);
+    // Empty unless a bank that exports its own categories has been imported,
+    // which is exactly when the filter below is worth showing.
+    api.get('/transactions/bank-categories').then(setBankCategories).catch(console.error);
   }, []);
   // Selection deliberately survives paging, so one batch can span pages — but
   // a filter change means the selection no longer matches what's on screen.
@@ -227,6 +233,18 @@ export default function Transactions() {
           ))}
         </select>
 
+        {bankCategories.length > 0 && (
+          <select
+            className="input w-40 text-sm"
+            value={bankCategory}
+            onChange={e => updateFilter('bank_category', e.target.value)}
+            title="The category the bank itself assigned"
+          >
+            <option value="">Any bank category</option>
+            {bankCategories.map(bc => <option key={bc} value={bc}>{bc}</option>)}
+          </select>
+        )}
+
         <input
           type="date"
           className="input w-36 text-sm"
@@ -368,6 +386,30 @@ export default function Transactions() {
             </div>
             <div className="text-2xl font-semibold text-slate-800 dark:text-slate-100">{formatCents(editing.amount_cents)}</div>
 
+            {/* What the bank actually sent. These are the fields a
+                categorisation rule can match on, and the heading above shows
+                the merchant name in place of the statement line whenever the
+                bank supplied one — so without this there's no way to see
+                what a rule would actually be matching against. */}
+            <dl className="text-xs space-y-1.5 border-t border-slate-100 dark:border-slate-700 pt-3">
+              <div className="flex gap-3">
+                <dt className="w-24 shrink-0 text-slate-400 dark:text-slate-500">Description</dt>
+                <dd className="text-slate-600 dark:text-slate-300 break-words font-mono">{editing.description}</dd>
+              </div>
+              {editing.merchant && (
+                <div className="flex gap-3">
+                  <dt className="w-24 shrink-0 text-slate-400 dark:text-slate-500">Merchant</dt>
+                  <dd className="text-slate-600 dark:text-slate-300 break-words font-mono">{editing.merchant}</dd>
+                </div>
+              )}
+              {editing.bank_category && (
+                <div className="flex gap-3">
+                  <dt className="w-24 shrink-0 text-slate-400 dark:text-slate-500">Bank category</dt>
+                  <dd className="text-slate-600 dark:text-slate-300 break-words font-mono">{editing.bank_category}</dd>
+                </div>
+              )}
+            </dl>
+
             <div>
               <label className="label">Category</label>
               <select
@@ -434,9 +476,15 @@ export default function Transactions() {
       {suggestRule && (
         <Modal title="Create a rule?" onClose={() => setSuggestRule(null)}>
           <div className="space-y-4">
+            {/* Which field is named here matters: the suggestion picks the
+                field it drew the pattern from, so "Woolworths" can come back
+                as a merchant rule that would never match the statement line. */}
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              Always categorise transactions containing{' '}
-              <strong>"{suggestRule.suggested.pattern}"</strong>?
+              Always categorise transactions whose{' '}
+              {suggestRule.suggested.match_field === 'merchant' ? 'merchant'
+                : suggestRule.suggested.match_field === 'bank_category' ? 'bank category'
+                : 'description'}{' '}
+              contains <strong>"{suggestRule.suggested.pattern}"</strong>?
             </p>
             <div className="flex gap-2 justify-end">
               <button className="btn-secondary" onClick={() => setSuggestRule(null)}>Skip</button>

@@ -4,25 +4,27 @@
 
 export const BANK_PROFILES = {
   anz: {
-    name: 'ANZ — Everyday / Savings', account_match: 'anz', skip_rows: 1,
-    date: { column: 0, format: 'DD/MM/YYYY' }, description: { column: 2 },
+    name: 'ANZ — Everyday / Savings', account_match: 'anz', skip_rows: 0,
+    date: { column: 0, format: 'D/M/YYYY' }, description: { column: 2 },
+    merchant: { column: 7 },
     amount: { column: 1, negate: false },
   },
   commbank: {
-    name: 'CommBank (CBA) — Everyday / Savings', account_match: 'commbank', skip_rows: 1,
-    date: { column: 0, format: 'DD/MM/YYYY' }, description: { column: 2 },
-    debit_credit: { debit_column: 1, credit_column: 3 },
+    name: 'CommBank (CBA) — Everyday / Savings', account_match: 'commbank', skip_rows: 0,
+    date: { column: 0, format: 'D/M/YYYY' }, description: { column: 2 },
+    amount: { column: 1, negate: false },
   },
   nab: {
     name: 'NAB — Everyday / Savings', account_match: 'nab', skip_rows: 1,
     date: { column: 0, format: 'DD MMM YY' }, description: { column: 4 },
-    merchant: { column: 7 },
+    merchant: { column: 7 }, bank_category: { column: 6 },
     amount: { column: 1, negate: false },
   },
   westpac: {
     name: 'Westpac — Everyday / Savings', account_match: 'westpac', skip_rows: 1,
-    date: { column: 0, format: 'DD/MM/YYYY' }, description: { column: 1 },
-    debit_credit: { debit_column: 2, credit_column: 3 },
+    date: { column: 1, format: 'D/M/YYYY' }, description: { column: 2 },
+    bank_category: { column: 6 },
+    debit_credit: { debit_column: 3, credit_column: 4 },
   },
 };
 
@@ -113,8 +115,10 @@ function cleanDescription(raw) {
 }
 
 export function parseBankCSV(text, profile) {
-  // BOM strip + skip header rows (record-based; bank CSV fields don't contain newlines)
-  const records = parseCsvText(text.replace(/^﻿/, '')).slice(profile.skip_rows || 1);
+  // BOM strip + skip header rows (record-based; bank CSV fields don't contain newlines).
+  // ?? not || — a headerless export sets skip_rows: 0, and `0 || 1` would
+  // quietly drop its first transaction.
+  const records = parseCsvText(text.replace(/^﻿/, '')).slice(profile.skip_rows ?? 1);
 
   const rows = [];
   for (const rec of records) {
@@ -143,11 +147,14 @@ export function parseBankCSV(text, profile) {
 
     // Prefer a dedicated merchant-name column when the profile has one
     const merchant = profile.merchant ? String(rec[profile.merchant.column] ?? '').trim() : '';
+    const bankCategory = profile.bank_category ? String(rec[profile.bank_category.column] ?? '').trim() : '';
 
     rows.push({
       date,
       description,
       description_clean: merchant || cleanDescription(description),
+      merchant: merchant || null,
+      bank_category: bankCategory || null,
       amount_cents,
     });
   }

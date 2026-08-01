@@ -84,7 +84,9 @@ function cleanDescription(raw) {
 function parseCSV(buffer, profile) {
   const records = parse(buffer, {
     skip_empty_lines: true,
-    from_line: (profile.skip_rows || 1) + 1,
+    // ?? not || — ANZ and CommBank export with no header row at all, and
+    // `0 || 1` would quietly skip their first transaction on every import.
+    from_line: (profile.skip_rows ?? 1) + 1,
     relax_column_count: true,
     bom: true,
     trim: true,
@@ -120,15 +122,20 @@ function parseCSV(buffer, profile) {
     if (!date || !description) continue;
 
     // Some exports carry a tidied merchant name in its own column (NAB's
-    // "Merchant Name"), which beats anything cleanDescription can recover
-    // from the raw statement line — but it's blank on plenty of rows, so
-    // fall back rather than trusting it blindly.
+    // "Merchant Name", ANZ's payment reference), which beats anything
+    // cleanDescription can recover from the raw statement line — but it's
+    // blank on plenty of rows, so fall back rather than trusting it blindly.
     const merchant = profile.merchant ? String(rec[profile.merchant.column] ?? '').trim() : '';
+    // The bank's own categorisation, where it has one, kept as-is so a rule
+    // can map it to a Havoro category directly.
+    const bankCategory = profile.bank_category ? String(rec[profile.bank_category.column] ?? '').trim() : '';
 
     rows.push({
       date,
       description,
       description_clean: merchant || cleanDescription(description),
+      merchant: merchant || null,
+      bank_category: bankCategory || null,
       amount_cents,
     });
   }
@@ -158,9 +165,9 @@ function importCSV(buffer, profile, accountId) {
 
   const insertStmt = db.prepare(`
     INSERT OR IGNORE INTO transactions
-      (account_id, date, description, description_clean, amount_cents,
-       category_id, is_transfer, import_hash, source_file)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (account_id, date, description, description_clean, merchant, bank_category,
+       amount_cents, category_id, is_transfer, import_hash, source_file)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   detectTransfers(parsed, accountId);
@@ -173,11 +180,12 @@ function importCSV(buffer, profile, accountId) {
       const exists = db.prepare('SELECT id FROM transactions WHERE import_hash = ?').get(hash);
       if (exists) { results.duplicates++; continue; }
 
-      const catId = row.is_transfer ? null : categorise(row.description);
+      const catId = row.is_transfer ? null : categorise({ ...row, account_id: accountId });
       if (!catId && !row.is_transfer) results.needsReview++;
 
       insertStmt.run(
         accountId, row.date, row.description, row.description_clean,
+        row.merchant, row.bank_category,
         row.amount_cents, catId, row.is_transfer ? 1 : 0, hash, null
       );
       results.inserted++;

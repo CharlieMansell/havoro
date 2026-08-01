@@ -16,10 +16,35 @@ function getRules() {
   ).all();
 }
 
-function categorise(description) {
+// What a rule can match against. Banks differ in what they give us: NAB
+// exports a merchant name and its own category, ANZ a payment reference,
+// CommBank nothing but the statement line — so a rule says which field it
+// applies to rather than every rule guessing at one blob of text.
+const MATCH_FIELDS = ['description', 'merchant', 'bank_category'];
+
+function fieldText(tx, field) {
+  if (field === 'merchant') return tx.merchant || '';
+  if (field === 'bank_category') return tx.bank_category || '';
+  return tx.description || '';
+}
+
+// Takes the transaction, not a string: import and "apply rules" used to pass
+// different text (raw description vs cleaned), so the same rule could match
+// on one path and miss on the other. One argument, one behaviour.
+function categorise(transaction) {
+  const tx = typeof transaction === 'string' ? { description: transaction } : transaction;
   const rules = getRules();
-  const lower = description.toLowerCase();
+
   for (const rule of rules) {
+    // A rule with no account applies everywhere; one scoped to an account
+    // only fires on that account's transactions. Without this, a bank
+    // category as generic as "PAYMENT" would catch other banks' rows too.
+    if (rule.account_id != null && Number(rule.account_id) !== Number(tx.account_id)) continue;
+
+    const description = fieldText(tx, rule.match_field);
+    if (!description) continue;
+
+    const lower = description.toLowerCase();
     const pat = rule.pattern.toLowerCase();
     let match = false;
     if (rule.match_type === 'contains') {
@@ -40,4 +65,4 @@ function categorise(description) {
   return null;
 }
 
-module.exports = { categorise };
+module.exports = { categorise, MATCH_FIELDS };
