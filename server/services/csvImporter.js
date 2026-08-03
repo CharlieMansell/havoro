@@ -66,10 +66,23 @@ function parseDate(value, format) {
   return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 }
 
-function importHash(accountId, date, description, amountCents) {
+// Two genuinely separate purchases can be identical on every field a bank
+// gives us — same day, same shop, same amount — and nothing in the export
+// tells them apart. `occurrence` is how many identical rows came before this
+// one in the same file, so the second coffee of the day gets its own hash
+// instead of being swallowed as a re-import of the first.
+//
+// Occurrence 0 deliberately hashes exactly what it always did, so rows
+// imported before this existed still match and don't all re-import as new.
+//
+// The limit: identical rows split across separate files still collapse,
+// since each file only knows about its own. Re-exporting a range that
+// covers the whole day avoids that.
+function importHash(accountId, date, description, amountCents, occurrence = 0) {
+  const base = `${accountId}|${date}|${description}|${amountCents}`;
   return crypto
     .createHash('sha256')
-    .update(`${accountId}|${date}|${description}|${amountCents}`)
+    .update(occurrence === 0 ? base : `${base}|${occurrence}`)
     .digest('hex');
 }
 
@@ -174,9 +187,16 @@ function importCSV(buffer, profile, accountId) {
 
   const results = { inserted: 0, duplicates: 0, needsReview: 0 };
 
+  // How many rows identical to this one have already been seen in this file.
+  const occurrences = new Map();
+
   const doImport = db.transaction(() => {
     for (const row of parsed) {
-      const hash = importHash(accountId, row.date, row.description, row.amount_cents);
+      const key = `${row.date}|${row.description}|${row.amount_cents}`;
+      const occurrence = occurrences.get(key) ?? 0;
+      occurrences.set(key, occurrence + 1);
+
+      const hash = importHash(accountId, row.date, row.description, row.amount_cents, occurrence);
       const exists = db.prepare('SELECT id FROM transactions WHERE import_hash = ?').get(hash);
       if (exists) { results.duplicates++; continue; }
 

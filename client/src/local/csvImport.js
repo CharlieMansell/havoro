@@ -161,8 +161,12 @@ export function parseBankCSV(text, profile) {
   return rows;
 }
 
-export async function importHash(accountId, date, description, amountCents) {
-  const data = new TextEncoder().encode(`${accountId}|${date}|${description}|${amountCents}`);
+// `occurrence` distinguishes rows a bank exports identically — see the note
+// in server/services/csvImporter.js. Occurrence 0 hashes what it always did,
+// so existing on-device data keeps deduping against itself.
+export async function importHash(accountId, date, description, amountCents, occurrence = 0) {
+  const base = `${accountId}|${date}|${description}|${amountCents}`;
+  const data = new TextEncoder().encode(occurrence === 0 ? base : `${base}|${occurrence}`);
   const digest = await crypto.subtle.digest('SHA-256', data);
   return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
