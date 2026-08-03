@@ -173,7 +173,7 @@ Scoping matters once several banks are imported: their `bank_category` vocabular
 | notes | TEXT | User notes |
 | is_transfer | INTEGER | 1 = excluded from budget/category |
 | transfer_pair_id | INTEGER | ID of the paired transaction |
-| import_hash | TEXT UNIQUE | SHA hash for deduplication |
+| import_hash | TEXT UNIQUE | SHA-256 of `account\|date\|description\|amount`, so re-importing an overlapping export skips rows already stored. Rows a bank exports identically get an occurrence suffix, so two genuinely separate same-day purchases both survive |
 | source_file | TEXT | Original CSV filename |
 | created_at | TEXT | |
 

@@ -295,8 +295,12 @@ async function handleUpload(path, form) {
   }
 
   const results = { inserted: 0, duplicates: 0, needsReview: 0 };
+  const occurrences = new Map();
   for (const row of parsed) {
-    const hash = await importHash(accountId, row.date, row.description, row.amount_cents);
+    const key = `${row.date}|${row.description}|${row.amount_cents}`;
+    const occurrence = occurrences.get(key) ?? 0;
+    occurrences.set(key, occurrence + 1);
+    const hash = await importHash(accountId, row.date, row.description, row.amount_cents, occurrence);
     if (get('SELECT id FROM transactions WHERE import_hash = ?', [hash])) { results.duplicates++; continue; }
     const catId = row.is_transfer ? null : categorise({ ...row, account_id: accountId });
     if (!catId && !row.is_transfer) results.needsReview++;
