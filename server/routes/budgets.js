@@ -76,16 +76,34 @@ router.get('/summary', (req, res) => {
   const totalBudgeted = budgetRows.reduce((s, b) => s + b.amount_cents, 0);
   const totalSpent = budgetRows.reduce((s, b) => s + b.spent_cents, 0);
 
+  const totalSpend = -(spend.total || 0);
+  const uncategorisedSpend = -(uncategorised.total || 0);
+
+  // What a budgeted category still commits you to. Money already spent inside
+  // one is what the budget was *for*, so counting both the spend and the whole
+  // budget charges it twice — a paid mortgage would eat its own budget again.
+  // Whichever is larger is the honest figure: below budget, the rest is still
+  // expected to go out; over budget, the real spend is the commitment.
+  const committedToBudgets = budgetRows.reduce(
+    (s, b) => s + Math.max(b.amount_cents, b.spent_cents), 0
+  );
+
+  // Spending no budget accounted for, which nothing above has charged yet.
+  // Clamped because a budget set against an income category would otherwise
+  // make this negative and inflate what's left.
+  const unbudgetedSpend = Math.max(0, totalSpend - totalSpent) + uncategorisedSpend;
+
   res.json({
     month,
     budgets: budgetRows,
     summary: {
       total_income_cents: income.total || 0,
-      total_spend_cents: -(spend.total || 0),
+      total_spend_cents: totalSpend,
       total_budgeted_cents: totalBudgeted,
       total_spent_cents: totalSpent,
-      uncategorised_spend_cents: -(uncategorised.total || 0),
-      safe_to_spend_cents: (income.total || 0) + (spend.total || 0) - totalBudgeted,
+      uncategorised_spend_cents: uncategorisedSpend,
+      unbudgeted_spend_cents: unbudgetedSpend,
+      safe_to_spend_cents: (income.total || 0) - committedToBudgets - unbudgetedSpend,
     }
   });
 });

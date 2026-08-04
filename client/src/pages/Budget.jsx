@@ -167,6 +167,14 @@ export default function Budget() {
             <p className={`text-xl font-semibold ${s.safe_to_spend_cents >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
               {formatCents(s.safe_to_spend_cents)}
             </p>
+            {/* Without this the figure is unexplainable — it's income minus
+                what the budgets still commit you to, minus spending no budget
+                covers, and those two are different things. */}
+            {s.unbudgeted_spend_cents > 0 && (
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                after {formatCents(s.unbudgeted_spend_cents)} unbudgeted
+              </p>
+            )}
           </div>
         </div>
       )}
