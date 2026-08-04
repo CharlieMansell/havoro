@@ -180,6 +180,7 @@ export default function Budget() {
       )}
 
       {/* Budget rows */}
+      <h2 className="font-serif text-lg font-semibold text-slate-800 dark:text-slate-100 pt-2">Budgeted</h2>
       <div className="card p-0 divide-y divide-slate-50 dark:divide-slate-800">
         {summary?.budgets.length === 0 ? (
           <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-sm">
@@ -223,6 +224,58 @@ export default function Budget() {
           })
         )}
       </div>
+
+      {/* Everything spent this month that no budget covers. A total alone
+          can't be acted on — each line is either a category that wants a
+          budget, or transactions sitting in the wrong category. */}
+      {summary?.unbudgeted?.length > 0 && (
+        <>
+          <div className="flex items-baseline gap-3 pt-2">
+            <h2 className="font-serif text-lg font-semibold text-slate-800 dark:text-slate-100">Unbudgeted</h2>
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {formatCents(summary.summary.unbudgeted_spend_cents)} across {summary.unbudgeted.length} categor{summary.unbudgeted.length === 1 ? 'y' : 'ies'}
+            </span>
+          </div>
+          <div className="card p-0 divide-y divide-slate-50 dark:divide-slate-800">
+            {summary.unbudgeted.map(u => (
+              <div key={u.category_id ?? 'uncategorised'} className="px-5 py-3 flex items-center gap-4">
+                <div
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ background: u.category_color || '#94a3b8' }}
+                />
+                <span className="text-sm font-medium text-slate-800 dark:text-slate-100 flex-1 min-w-0 truncate">
+                  {u.category_name}
+                </span>
+                <span className="text-sm text-slate-600 dark:text-slate-300 shrink-0">{formatCents(u.spent_cents)}</span>
+                <div className="flex gap-1 shrink-0">
+                  {/* Uncategorised has no category to budget — it needs
+                      sorting on the transactions page instead. */}
+                  {u.category_id && (
+                    <button
+                      className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline px-2 py-1"
+                      onClick={() => {
+                        setEditBudget(null);
+                        setForm({ category_id: String(u.category_id), amount: (u.spent_cents / 100).toFixed(2), rollover: false });
+                        setShowAdd(true);
+                      }}
+                    >
+                      Add budget
+                    </button>
+                  )}
+                  <Link
+                    className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1"
+                    to={u.category_id
+                      ? `/transactions?category_id=${u.category_id}&budget_month=${month}`
+                      : `/transactions?needs_review=true&budget_month=${month}`}
+                  >
+                    Review
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {(showAdd || editBudget) && (
         <Modal title={editBudget ? 'Edit budget' : 'Add budget'} onClose={() => { setShowAdd(false); setEditBudget(null); }}>

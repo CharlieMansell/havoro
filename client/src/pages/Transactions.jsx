@@ -46,6 +46,9 @@ export default function Transactions() {
   const dateFrom = searchParams.get('date_from') || '';
   const dateTo = searchParams.get('date_to') || '';
   const bankCategory = searchParams.get('bank_category') || '';
+  // Arrives from the budget page's Review links, so the rows shown are exactly
+  // the ones that made up the figure there.
+  const budgetMonth = searchParams.get('budget_month') || '';
 
   // Everything except paging — the filters that decide *which* transactions
   // are in play, shared by the list request and "select all matching".
@@ -58,8 +61,9 @@ export default function Transactions() {
     if (dateFrom) params.set('date_from', dateFrom);
     if (dateTo) params.set('date_to', dateTo);
     if (bankCategory) params.set('bank_category', bankCategory);
+    if (budgetMonth) params.set('budget_month', budgetMonth);
     return params;
-  }, [needsReview, search, accountId, categoryId, dateFrom, dateTo, bankCategory]);
+  }, [needsReview, search, accountId, categoryId, dateFrom, dateTo, bankCategory, budgetMonth]);
 
   const load = useCallback(() => {
     const params = filterParams();
@@ -281,6 +285,16 @@ export default function Transactions() {
           onChange={e => updateFilter('date_to', e.target.value)}
           title="To date"
         />
+
+        {budgetMonth && (
+          <button
+            className="btn-secondary text-xs"
+            onClick={() => updateFilter('budget_month', '')}
+            title="Showing only transactions counting toward this month"
+          >
+            {shortMonth(budgetMonth)} ✕
+          </button>
+        )}
 
         {needsReview ? (
           <button className="btn-secondary text-xs" onClick={() => setSearchParams({})}>Show all</button>

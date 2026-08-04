@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db/db');
 const { requireAuth } = require('../middleware/auth');
 const { categorise } = require('../services/categoriser');
+const { BUDGET_MONTH_SQL } = require('../services/budgetMonth');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -10,7 +11,7 @@ router.use(requireAuth);
 // drift: "select all matching these filters" in the UI has to mean exactly
 // the set the list would have shown, or a bulk action hits the wrong rows.
 function buildFilters(query) {
-  const { account_id, category_id, needs_review, is_transfer, date_from, date_to, search, bank_category } = query;
+  const { account_id, category_id, needs_review, is_transfer, date_from, date_to, search, bank_category, budget_month } = query;
 
   const where = [];
   const params = [];
@@ -22,6 +23,9 @@ function buildFilters(query) {
   if (date_from) { where.push('t.date >= ?'); params.push(date_from); }
   if (date_to) { where.push('t.date <= ?'); params.push(date_to); }
   if (bank_category) { where.push('t.bank_category = ?'); params.push(bank_category); }
+  // The month a row counts toward, which is what the budget page totals by —
+  // filtering on raw dates would miss anything shifted across the boundary.
+  if (budget_month) { where.push(`${BUDGET_MONTH_SQL} = ?`); params.push(budget_month); }
   if (search) {
     where.push("(t.description LIKE ? OR t.description_clean LIKE ?)");
     params.push(`%${search}%`, `%${search}%`);

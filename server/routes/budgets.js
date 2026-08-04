@@ -79,6 +79,32 @@ router.get('/summary', (req, res) => {
   const totalSpend = -(spend.total || 0);
   const uncategorisedSpend = -(uncategorised.total || 0);
 
+  // Where the unbudgeted money actually went, so the figure is a list you can
+  // act on — budget the category, or go and recategorise what's in it —
+  // rather than a total with no way in. Uncategorised is its own line at the
+  // end, since it needs recategorising rather than a budget.
+  const budgetedIds = new Set(budgets.map(b => b.category_id));
+  const unbudgeted = db.prepare(`
+    SELECT c.id as category_id, c.name as category_name, c.color as category_color,
+           SUM(t.amount_cents) as total
+    FROM transactions t
+    JOIN categories c ON c.id = t.category_id
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'expense' AND t.is_transfer = 0
+    GROUP BY c.id
+    ORDER BY total ASC
+  `).all(month)
+    .filter(r => !budgetedIds.has(r.category_id))
+    .map(r => ({ ...r, spent_cents: -r.total, total: undefined }));
+
+  if (uncategorisedSpend > 0) {
+    unbudgeted.push({
+      category_id: null,
+      category_name: 'Uncategorised',
+      category_color: null,
+      spent_cents: uncategorisedSpend,
+    });
+  }
+
   // What a budgeted category still commits you to. Money already spent inside
   // one is what the budget was *for*, so counting both the spend and the whole
   // budget charges it twice — a paid mortgage would eat its own budget again.
@@ -96,6 +122,7 @@ router.get('/summary', (req, res) => {
   res.json({
     month,
     budgets: budgetRows,
+    unbudgeted,
     summary: {
       total_income_cents: income.total || 0,
       total_spend_cents: totalSpend,
