@@ -212,6 +212,7 @@ function buildFilters(q) {
   if (q.get('date_from')) { where.push('t.date >= ?'); params.push(q.get('date_from')); }
   if (q.get('date_to')) { where.push('t.date <= ?'); params.push(q.get('date_to')); }
   if (q.get('bank_category')) { where.push('t.bank_category = ?'); params.push(q.get('bank_category')); }
+  if (q.get('budget_month')) { where.push(`${BUDGET_MONTH_SQL} = ?`); params.push(q.get('budget_month')); }
   if (q.get('search')) {
     where.push('(t.description LIKE ? OR t.description_clean LIKE ?)');
     params.push(`%${q.get('search')}%`, `%${q.get('search')}%`);
