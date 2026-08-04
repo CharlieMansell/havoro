@@ -36,6 +36,8 @@ try { db.exec("ALTER TABLE category_rules ADD COLUMN match_field TEXT NOT NULL D
 // becomes. No REFERENCES on the added column: SQLite can't add a foreign key
 // to an existing table, so routes/rules.js checks the account exists instead.
 try { db.exec('ALTER TABLE category_rules ADD COLUMN account_id INTEGER'); } catch {}
+// NULL = counts toward the month of its own date; see services/budgetMonth.js.
+try { db.exec('ALTER TABLE transactions ADD COLUMN budget_month TEXT'); } catch {}
 try {
   db.exec(`CREATE TABLE IF NOT EXISTS transfer_plans (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +68,7 @@ if (settingsCount.n === 0) {
     ['default_growth_shares', '0.09'],
     ['default_growth_property', '0.05'],
     ['default_growth_super', '0.08'],
+    ['budget_income_shift_days', '3'],
   ];
   defaults.forEach(([k, v]) => insert.run(k, v));
 }

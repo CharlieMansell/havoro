@@ -96,6 +96,19 @@ function seed() {
   run("INSERT OR IGNORE INTO settings (key, value) VALUES ('default_growth_cash','0.045'),('default_growth_shares','0.09'),('default_growth_property','0.05'),('default_growth_super','0.08')");
 }
 
+// Which month a transaction counts toward — mirrors server/services/budgetMonth.js
+const BUDGET_MONTH_SQL = "COALESCE(t.budget_month, substr(t.date, 1, 7))";
+const SHIFT_DAYS = 3;
+
+function defaultBudgetMonth({ date, amount_cents, is_transfer }) {
+  if (is_transfer || amount_cents <= 0) return null;
+  const [year, month, day] = String(date).split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (day <= daysInMonth - SHIFT_DAYS) return null;
+  return month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`;
+}
+
 // ── endpoint implementations ────────────────────────────────────────────────
 const MONTHLY_FACTOR = { weekly: 52 / 12, fortnightly: 26 / 12, monthly: 1, quarterly: 1 / 3, annual: 1 / 12 };
 
@@ -105,7 +118,7 @@ function monthRange(month) {
 }
 
 function dashboardSummary() {
-  const { from, to } = monthRange();
+  const { month, from, to } = monthRange();
   const netWorth = get(`SELECT SUM(CASE WHEN type = 'liability' THEN -ABS(current_balance_cents) ELSE current_balance_cents END) as nw
     FROM accounts WHERE include_in_net_worth = 1 AND archived = 0`);
   const breakdown = all(`SELECT CASE type
@@ -116,16 +129,16 @@ function dashboardSummary() {
     FROM accounts WHERE include_in_net_worth = 1 AND archived = 0 GROUP BY asset_class`);
   const income = get(`SELECT COALESCE(SUM(t.amount_cents),0) as total FROM transactions t
     JOIN categories c ON c.id = t.category_id
-    WHERE t.date >= ? AND t.date <= ? AND c.kind = 'income' AND t.is_transfer = 0`, [from, to]);
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'income' AND t.is_transfer = 0`, [month]);
   const expenses = get(`SELECT COALESCE(SUM(t.amount_cents),0) as total FROM transactions t
     JOIN categories c ON c.id = t.category_id
-    WHERE t.date >= ? AND t.date <= ? AND c.kind = 'expense' AND t.is_transfer = 0`, [from, to]);
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'expense' AND t.is_transfer = 0`, [month]);
   const incomeTotal = income.total || 0;
   const expensesTotal = Math.abs(expenses.total || 0);
   const top = all(`SELECT c.name, c.color, c.id, ABS(SUM(t.amount_cents)) as total FROM transactions t
     JOIN categories c ON c.id = t.category_id
-    WHERE t.date >= ? AND t.date <= ? AND c.kind = 'expense' AND t.is_transfer = 0
-    GROUP BY c.id ORDER BY total DESC LIMIT 6`, [from, to]);
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'expense' AND t.is_transfer = 0
+    GROUP BY c.id ORDER BY total DESC LIMIT 6`, [month]);
   const needsReview = get('SELECT COUNT(*) as n FROM transactions WHERE category_id IS NULL AND is_transfer = 0');
   const goals = all('SELECT * FROM goals WHERE archived = 0 ORDER BY priority LIMIT 4');
   const history = all(`SELECT ci.date,
@@ -306,10 +319,10 @@ async function handleUpload(path, form) {
     if (!catId && !row.is_transfer) results.needsReview++;
     // raw db.run in the loop; persist once at the end (persist() per row is slow)
     db.run(`INSERT OR IGNORE INTO transactions
-        (account_id, date, description, description_clean, merchant, bank_category, amount_cents, category_id, is_transfer, import_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (account_id, date, description, description_clean, merchant, bank_category, amount_cents, category_id, is_transfer, budget_month, import_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [accountId, row.date, row.description, row.description_clean, row.merchant, row.bank_category,
-       row.amount_cents, catId, row.is_transfer ? 1 : 0, hash]);
+       row.amount_cents, catId, row.is_transfer ? 1 : 0, defaultBudgetMonth(row), hash]);
     results.inserted++;
   }
   persist();
@@ -349,7 +362,7 @@ function handle(method, path, query, body) {
     return { suggested: { match_type: 'contains', match_field, pattern, category_id: tx.category_id, priority: 50 } };
   }
   if ((match = m(/^\/transactions\/(\d+)$/)) && method === 'PUT')
-    return updateAllowed('transactions', match[1], body, ['category_id', 'notes', 'is_transfer', 'description_clean']);
+    return updateAllowed('transactions', match[1], body, ['category_id', 'notes', 'is_transfer', 'description_clean', 'budget_month']);
 
   if ((match = m(/^\/transactions\/(\d+)$/)) && method === 'DELETE') {
     if (!get('SELECT id FROM transactions WHERE id = ?', [match[1]])) {
@@ -362,11 +375,12 @@ function handle(method, path, query, body) {
   if (path === '/transactions/bulk-categorize' && method === 'POST') {
     const { ids, category_id, is_transfer } = body;
     if (!Array.isArray(ids) || ids.length === 0) return { error: 'ids must be a non-empty array', status: 400 };
-    if (category_id === undefined && is_transfer === undefined) return { error: 'category_id or is_transfer required', status: 400 };
+    if (category_id === undefined && is_transfer === undefined && body.budget_month === undefined) return { error: 'category_id, is_transfer or budget_month required', status: 400 };
     const fields = [];
     const values = [];
     if (category_id !== undefined) { fields.push('category_id = ?'); values.push(category_id || null); }
     if (is_transfer !== undefined) { fields.push('is_transfer = ?'); values.push(is_transfer ? 1 : 0); }
+    if (body.budget_month !== undefined) { fields.push('budget_month = ?'); values.push(body.budget_month || null); }
     const placeholders = ids.map(() => '?').join(',');
     db.run(`UPDATE transactions SET ${fields.join(', ')} WHERE id IN (${placeholders})`, [...values, ...ids]);
     persist();

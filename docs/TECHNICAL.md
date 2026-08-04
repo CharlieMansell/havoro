@@ -172,6 +172,7 @@ Scoping matters once several banks are imported: their `bank_category` vocabular
 | category_id | INTEGER FK | NULL = uncategorised |
 | notes | TEXT | User notes |
 | is_transfer | INTEGER | 1 = excluded from budget/category |
+| budget_month | TEXT | `YYYY-MM` the transaction counts toward. NULL = the month of its own date. Set automatically for income arriving in the last few days of a month, since a salary paid on the 31st funds the month after; overridable per transaction |
 | transfer_pair_id | INTEGER | ID of the paired transaction |
 | import_hash | TEXT UNIQUE | SHA-256 of `account\|date\|description\|amount`, so re-importing an overlapping export skips rows already stored. Rows a bank exports identically get an occurrence suffix, so two genuinely separate same-day purchases both survive |
 | source_file | TEXT | Original CSV filename |
@@ -381,7 +382,7 @@ All endpoints are prefixed `/api/`. Authentication is via an httpOnly cookie set
 | GET | `/api/transactions/ids` | Yes | Ids of every transaction matching the same filters as the list, ignoring pagination. Backs "select all N" in the UI. |
 | GET | `/api/transactions/bank-categories` | Yes | Distinct bank-assigned categories present in the data. Empty until a bank that exports them is imported; the UI hides the filter when so. |
 | GET | `/api/transactions/needs-review/count` | Yes | Count of uncategorised non-transfer transactions. |
-| PUT | `/api/transactions/:id` | Yes | Update category, notes, description_clean, is_transfer. |
+| PUT | `/api/transactions/:id` | Yes | Update category, notes, description_clean, is_transfer, budget_month. Send `budget_month: null` to go back to the transaction's own month. |
 | DELETE | `/api/transactions/:id` | Yes | Permanently delete one transaction. Frees its `import_hash`, so re-importing the source statement restores it. |
 | POST | `/api/transactions/bulk-delete` | Yes | Delete a batch of transactions (`ids` array). Runs as one transaction; returns `{ deleted }`. |
 | POST | `/api/transactions/:id/suggest-rule` | Yes | Return a suggested categorisation rule for this transaction. |

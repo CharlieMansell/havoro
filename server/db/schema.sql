@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   description_clean TEXT,
   merchant          TEXT,
   bank_category     TEXT,
+  budget_month      TEXT,
   amount_cents      INTEGER NOT NULL,
   category_id       INTEGER REFERENCES categories(id),
   notes             TEXT,

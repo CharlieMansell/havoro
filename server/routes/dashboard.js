@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db/db');
 const { requireAuth } = require('../middleware/auth');
+const { BUDGET_MONTH_SQL } = require('../services/budgetMonth');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -8,9 +9,8 @@ router.use(requireAuth);
 router.get('/summary', (req, res) => {
   const now = new Date();
   const month = now.toISOString().slice(0, 7);
-  const [year, mon] = month.split('-');
-  const dateFrom = `${year}-${mon}-01`;
-  const dateTo = `${year}-${mon}-31`;
+  // Scoped by the month a transaction counts toward, not the month it
+  // happened in — see services/budgetMonth.js.
 
   // Net worth: sum of all include_in_net_worth accounts
   const netWorthRow = db.prepare(`
@@ -62,15 +62,15 @@ router.get('/summary', (req, res) => {
     SELECT COALESCE(SUM(t.amount_cents), 0) as total
     FROM transactions t
     JOIN categories c ON c.id = t.category_id
-    WHERE t.date >= ? AND t.date <= ? AND c.kind = 'income' AND t.is_transfer = 0
-  `).get(dateFrom, dateTo);
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'income' AND t.is_transfer = 0
+  `).get(month);
 
   const expenses = db.prepare(`
     SELECT COALESCE(SUM(t.amount_cents), 0) as total
     FROM transactions t
     JOIN categories c ON c.id = t.category_id
-    WHERE t.date >= ? AND t.date <= ? AND c.kind = 'expense' AND t.is_transfer = 0
-  `).get(dateFrom, dateTo);
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'expense' AND t.is_transfer = 0
+  `).get(month);
 
   const incomeTotal = income.total || 0;
   const expensesTotal = Math.abs(expenses.total || 0);
@@ -81,11 +81,11 @@ router.get('/summary', (req, res) => {
     SELECT c.name, c.color, c.id, ABS(SUM(t.amount_cents)) as total
     FROM transactions t
     JOIN categories c ON c.id = t.category_id
-    WHERE t.date >= ? AND t.date <= ? AND c.kind = 'expense' AND t.is_transfer = 0
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'expense' AND t.is_transfer = 0
     GROUP BY c.id
     ORDER BY total DESC
     LIMIT 6
-  `).all(dateFrom, dateTo);
+  `).all(month);
 
   // Needs review count
   const needsReview = db.prepare(

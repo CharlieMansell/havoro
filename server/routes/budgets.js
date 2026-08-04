@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db/db');
 const { requireAuth } = require('../middleware/auth');
+const { BUDGET_MONTH_SQL } = require('../services/budgetMonth');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -18,9 +19,8 @@ router.get('/', (req, res) => {
 // GET /api/budgets/summary?month=YYYY-MM
 router.get('/summary', (req, res) => {
   const month = req.query.month || new Date().toISOString().slice(0, 7);
-  const [year, mon] = month.split('-');
-  const dateFrom = `${year}-${mon}-01`;
-  const dateTo = `${year}-${mon}-31`;
+  // Actuals are scoped by the month a transaction counts toward rather than
+  // its raw date, so a salary paid on the 31st lands in the month it funds.
 
   // Get budgets applicable for this month
   const budgets = db.prepare(`
@@ -36,10 +36,10 @@ router.get('/summary', (req, res) => {
   // Actual spend per category this month (expenses only, excluding transfers)
   const actuals = db.prepare(`
     SELECT category_id, SUM(amount_cents) as total
-    FROM transactions
-    WHERE date >= ? AND date <= ? AND is_transfer = 0
+    FROM transactions t
+    WHERE ${BUDGET_MONTH_SQL} = ? AND is_transfer = 0
     GROUP BY category_id
-  `).all(dateFrom, dateTo);
+  `).all(month);
 
   const actualMap = {};
   actuals.forEach(a => { actualMap[a.category_id] = a.total; });
@@ -49,23 +49,23 @@ router.get('/summary', (req, res) => {
     SELECT SUM(t.amount_cents) as total
     FROM transactions t
     JOIN categories c ON c.id = t.category_id
-    WHERE t.date >= ? AND t.date <= ? AND c.kind = 'income' AND t.is_transfer = 0
-  `).get(dateFrom, dateTo);
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'income' AND t.is_transfer = 0
+  `).get(month);
 
   // Total spend (expenses) this month
   const spend = db.prepare(`
     SELECT SUM(t.amount_cents) as total
     FROM transactions t
     JOIN categories c ON c.id = t.category_id
-    WHERE t.date >= ? AND t.date <= ? AND c.kind = 'expense' AND t.is_transfer = 0
-  `).get(dateFrom, dateTo);
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'expense' AND t.is_transfer = 0
+  `).get(month);
 
   // Uncategorised spend (excluding transfers)
   const uncategorised = db.prepare(`
     SELECT SUM(amount_cents) as total
-    FROM transactions
-    WHERE date >= ? AND date <= ? AND category_id IS NULL AND is_transfer = 0 AND amount_cents < 0
-  `).get(dateFrom, dateTo);
+    FROM transactions t
+    WHERE ${BUDGET_MONTH_SQL} = ? AND category_id IS NULL AND is_transfer = 0 AND amount_cents < 0
+  `).get(month);
 
   const budgetRows = budgets.map(b => ({
     ...b,
