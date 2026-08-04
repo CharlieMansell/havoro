@@ -7,6 +7,11 @@ import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../components/ConfirmDialog';
 import { SkTableRows } from '../components/Skeleton';
 
+// The month a transaction's own date falls in — the default it counts toward.
+const monthOf = (date) => String(date).slice(0, 7);
+const shortMonth = (month) =>
+  new Date(`${month}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+
 function CategoryBadge({ name, color }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
@@ -31,6 +36,7 @@ export default function Transactions() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [bankCategories, setBankCategories] = useState([]);
+  const [bulkMonth, setBulkMonth] = useState('');
 
   const page = Number(searchParams.get('page') || 1);
   const needsReview = searchParams.get('needs_review') === 'true';
@@ -106,6 +112,22 @@ export default function Transactions() {
       toast.addToast(`${selected.size} transaction${selected.size === 1 ? '' : 's'} categorised`);
       setSelected(new Set());
       setBulkCategoryId('');
+      load();
+    } catch (e) {
+      toast.addToast(e.message, 'error');
+    } finally {
+      setBulkApplying(false);
+    }
+  };
+
+  const bulkSetMonth = async () => {
+    if (!bulkMonth || selected.size === 0) return;
+    setBulkApplying(true);
+    try {
+      await api.post('/transactions/bulk-categorize', { ids: [...selected], budget_month: bulkMonth });
+      toast.addToast(`${selected.size} transaction${selected.size === 1 ? '' : 's'} moved to ${shortMonth(bulkMonth)}`);
+      setSelected(new Set());
+      setBulkMonth('');
       load();
     } catch (e) {
       toast.addToast(e.message, 'error');
@@ -296,6 +318,16 @@ export default function Transactions() {
           <button className="btn-primary text-xs" onClick={bulkApply} disabled={!bulkCategoryId || bulkApplying}>
             {bulkApplying ? 'Applying…' : 'Apply'}
           </button>
+          <input
+            type="month"
+            className="input w-36 text-sm"
+            value={bulkMonth}
+            onChange={e => setBulkMonth(e.target.value)}
+            title="Count these toward a different month"
+          />
+          <button className="btn-primary text-xs" onClick={bulkSetMonth} disabled={!bulkMonth || bulkApplying}>
+            Set month
+          </button>
           <button className="btn-secondary text-xs" onClick={() => setSelected(new Set())}>Clear selection</button>
           <button
             className="btn-secondary text-xs ml-auto text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -333,7 +365,19 @@ export default function Transactions() {
                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                     <input type="checkbox" className="rounded" checked={selected.has(tx.id)} onChange={() => toggleSelected(tx.id)} />
                   </td>
-                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatDate(tx.date)}</td>
+                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    {formatDate(tx.date)}
+                    {/* Shifted rows would otherwise be invisible here and
+                        unexplainably absent from their own month's totals. */}
+                    {tx.budget_month && tx.budget_month !== monthOf(tx.date) && (
+                      <span
+                        className="ml-1.5 text-xs text-indigo-500 dark:text-indigo-400"
+                        title={`Counts toward ${shortMonth(tx.budget_month)}`}
+                      >
+                        → {shortMonth(tx.budget_month)}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-800 dark:text-slate-100 max-w-xs truncate">
                     {tx.description_clean || tx.description}
                   </td>
@@ -432,6 +476,26 @@ export default function Transactions() {
             </div>
 
             <div>
+              <label className="label">Counts toward</label>
+              <input
+                type="month"
+                className="input"
+                value={editing.budget_month || monthOf(editing.date)}
+                onChange={e => {
+                  const v = e.target.value;
+                  // Matching its own date means no override at all, so it
+                  // keeps following the date if that's ever corrected.
+                  setEditing(ex => ({ ...ex, budget_month: !v || v === monthOf(ex.date) ? null : v }));
+                }}
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {editing.budget_month && editing.budget_month !== monthOf(editing.date)
+                  ? `Moved out of ${shortMonth(monthOf(editing.date))} — pay landing at the end of a month funds the next one.`
+                  : 'The month it happened in. Change this if the money is really for another month.'}
+              </p>
+            </div>
+
+            <div>
               <label className="label">Mark as transfer</label>
               <input
                 type="checkbox"
@@ -455,6 +519,7 @@ export default function Transactions() {
                   await api.put(`/transactions/${editing.id}`, {
                     category_id: editing.category_id || null,
                     is_transfer: editing.is_transfer,
+                    budget_month: editing.budget_month || null,
                   });
                   toast.addToast('Transaction updated');
                   setEditing(null);

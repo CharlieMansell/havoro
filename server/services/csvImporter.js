@@ -2,6 +2,7 @@ const { parse } = require('csv-parse/sync');
 const crypto = require('crypto');
 const db = require('../db/db');
 const { categorise } = require('./categoriser');
+const { defaultBudgetMonth, shiftDays } = require('./budgetMonth');
 
 function parseAmount(value) {
   if (!value && value !== 0) return null;
@@ -179,8 +180,8 @@ function importCSV(buffer, profile, accountId) {
   const insertStmt = db.prepare(`
     INSERT OR IGNORE INTO transactions
       (account_id, date, description, description_clean, merchant, bank_category,
-       amount_cents, category_id, is_transfer, import_hash, source_file)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       amount_cents, category_id, is_transfer, budget_month, import_hash, source_file)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   detectTransfers(parsed, accountId);
@@ -189,6 +190,8 @@ function importCSV(buffer, profile, accountId) {
 
   // How many rows identical to this one have already been seen in this file.
   const occurrences = new Map();
+  // Read once rather than per row — it's a settings lookup.
+  const days = shiftDays();
 
   const doImport = db.transaction(() => {
     for (const row of parsed) {
@@ -206,7 +209,8 @@ function importCSV(buffer, profile, accountId) {
       insertStmt.run(
         accountId, row.date, row.description, row.description_clean,
         row.merchant, row.bank_category,
-        row.amount_cents, catId, row.is_transfer ? 1 : 0, hash, null
+        row.amount_cents, catId, row.is_transfer ? 1 : 0,
+        defaultBudgetMonth(row, days), hash, null
       );
       results.inserted++;
     }

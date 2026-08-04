@@ -87,18 +87,23 @@ router.get('/needs-review/count', (req, res) => {
 // POST /api/transactions/bulk-categorize
 // Applies one category_id (or is_transfer flag) to a batch of transaction ids at once.
 router.post('/bulk-categorize', (req, res) => {
-  const { ids, category_id, is_transfer } = req.body;
+  const { ids, category_id, is_transfer, budget_month } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids must be a non-empty array' });
   }
-  if (category_id === undefined && is_transfer === undefined) {
-    return res.status(400).json({ error: 'category_id or is_transfer required' });
+  if (category_id === undefined && is_transfer === undefined && budget_month === undefined) {
+    return res.status(400).json({ error: 'category_id, is_transfer or budget_month required' });
+  }
+  if (budget_month !== undefined && budget_month !== null && budget_month !== '' && !/^\d{4}-\d{2}$/.test(budget_month)) {
+    return res.status(400).json({ error: 'budget_month must be YYYY-MM' });
   }
 
   const fields = [];
   const values = [];
   if (category_id !== undefined) { fields.push('category_id = ?'); values.push(category_id || null); }
   if (is_transfer !== undefined) { fields.push('is_transfer = ?'); values.push(is_transfer ? 1 : 0); }
+  // '' clears the override, putting the rows back on their own date's month.
+  if (budget_month !== undefined) { fields.push('budget_month = ?'); values.push(budget_month || null); }
 
   const placeholders = ids.map(() => '?').join(',');
   const stmt = db.prepare(`UPDATE transactions SET ${fields.join(', ')} WHERE id IN (${placeholders})`);
@@ -162,7 +167,7 @@ router.post('/apply-rules', (req, res) => {
 
 // PUT /api/transactions/:id
 router.put('/:id', (req, res) => {
-  const allowed = ['category_id','notes','description_clean','is_transfer'];
+  const allowed = ['category_id','notes','description_clean','is_transfer','budget_month'];
   const fields = Object.keys(req.body).filter(k => allowed.includes(k));
   if (!fields.length) return res.status(400).json({ error: 'No valid fields' });
 
