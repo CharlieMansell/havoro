@@ -147,7 +147,16 @@ export default function Budget() {
           </div>
           <div className="card">
             <p className="label">Spent</p>
-            <p className="text-xl font-semibold text-slate-800 dark:text-slate-100">{formatCents(s.total_spent_cents)}</p>
+            {/* Every expense this month, not just the ones inside a budgeted
+                category — total_spent_cents only counts budgeted categories,
+                so it reads $0 before any budget exists and understates the
+                rest of the time. "Safe to spend" nets off this same figure. */}
+            <p className="text-xl font-semibold text-slate-800 dark:text-slate-100">{formatCents(s.total_spend_cents)}</p>
+            {s.total_budgeted_cents > 0 && (
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                {formatCents(s.total_spent_cents)} in budgeted categories
+              </p>
+            )}
           </div>
           <div className="card">
             <p className="label">Budgeted</p>
@@ -158,6 +167,14 @@ export default function Budget() {
             <p className={`text-xl font-semibold ${s.safe_to_spend_cents >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
               {formatCents(s.safe_to_spend_cents)}
             </p>
+            {/* Without this the figure is unexplainable — it's income minus
+                what the budgets still commit you to, minus spending no budget
+                covers, and those two are different things. */}
+            {s.unbudgeted_spend_cents > 0 && (
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                after {formatCents(s.unbudgeted_spend_cents)} unbudgeted
+              </p>
+            )}
           </div>
         </div>
       )}
