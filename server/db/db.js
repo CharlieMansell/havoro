@@ -38,6 +38,9 @@ try { db.exec("ALTER TABLE category_rules ADD COLUMN match_field TEXT NOT NULL D
 try { db.exec('ALTER TABLE category_rules ADD COLUMN account_id INTEGER'); } catch {}
 // NULL = counts toward the month of its own date; see services/budgetMonth.js.
 try { db.exec('ALTER TABLE transactions ADD COLUMN budget_month TEXT'); } catch {}
+// Which account this budget's money gets transferred to, so the transfer
+// planner can derive itself from the budget instead of being a second copy.
+try { db.exec('ALTER TABLE budgets ADD COLUMN to_account_id INTEGER'); } catch {}
 try {
   db.exec(`CREATE TABLE IF NOT EXISTS transfer_plans (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -122,6 +122,8 @@ A budgeted category commits whichever is larger: its budget, or what has actuall
 
 Every row has **Review**, which opens the transactions that produced its figure.
 
+Each budget can be tagged with the account its money needs to be **transferred to** — bills account, credit card, offset, wherever it's paid from. The Transfer Planner then groups your budget by destination and totals each one, so changing a budget changes the transfer instead of leaving a second copy of the same numbers to drift. Budgets with no destination set are listed separately so nothing goes missing.
+
 Budgets can optionally **roll over** — any unspent amount carries forward to the next month's budget.
 
 Pick the month with the month selector at the top of the page.

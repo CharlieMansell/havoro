@@ -24,9 +24,11 @@ router.get('/summary', (req, res) => {
 
   // Get budgets applicable for this month
   const budgets = db.prepare(`
-    SELECT b.*, c.name as category_name, c.color as category_color, c.kind
+    SELECT b.*, c.name as category_name, c.color as category_color, c.kind,
+           a.name as to_account_name
     FROM budgets b
     JOIN categories c ON c.id = b.category_id
+    LEFT JOIN accounts a ON a.id = b.to_account_id
     WHERE b.start_month <= ?
     GROUP BY b.category_id
     HAVING b.start_month = MAX(b.start_month)
@@ -190,21 +192,38 @@ router.post('/', (req, res) => {
   if (!category_id || amount_cents === undefined) {
     return res.status(400).json({ error: 'category_id and amount_cents required' });
   }
+  // '' from an unset picker means no destination, same as omitting it.
+  const toAccountId = req.body.to_account_id === '' || req.body.to_account_id == null
+    ? null : Number(req.body.to_account_id);
+  if (toAccountId !== null && !db.prepare('SELECT id FROM accounts WHERE id = ?').get(toAccountId)) {
+    return res.status(400).json({ error: 'to_account_id does not match an account' });
+  }
   const month = start_month || new Date().toISOString().slice(0, 7);
   const { lastInsertRowid } = db.prepare(
-    'INSERT INTO budgets (category_id, amount_cents, rollover, start_month) VALUES (?, ?, ?, ?)'
-  ).run(category_id, amount_cents, rollover ? 1 : 0, month);
+    'INSERT INTO budgets (category_id, amount_cents, rollover, start_month, to_account_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(category_id, amount_cents, rollover ? 1 : 0, month, toAccountId);
 
   res.status(201).json(db.prepare('SELECT * FROM budgets WHERE id = ?').get(lastInsertRowid));
 });
 
 router.put('/:id', (req, res) => {
-  const allowed = ['amount_cents','rollover','start_month'];
+  const allowed = ['amount_cents','rollover','start_month','to_account_id'];
   const fields = Object.keys(req.body).filter(k => allowed.includes(k));
   if (!fields.length) return res.status(400).json({ error: 'No valid fields' });
 
+  const value = f => {
+    if (f !== 'to_account_id') return req.body[f];
+    return req.body[f] === '' || req.body[f] == null ? null : Number(req.body[f]);
+  };
+  if (fields.includes('to_account_id')) {
+    const id = value('to_account_id');
+    if (id !== null && !db.prepare('SELECT id FROM accounts WHERE id = ?').get(id)) {
+      return res.status(400).json({ error: 'to_account_id does not match an account' });
+    }
+  }
+
   const set = fields.map(f => `${f} = ?`).join(', ');
-  db.prepare(`UPDATE budgets SET ${set} WHERE id = ?`).run(...fields.map(f => req.body[f]), req.params.id);
+  db.prepare(`UPDATE budgets SET ${set} WHERE id = ?`).run(...fields.map(value), req.params.id);
   res.json(db.prepare('SELECT * FROM budgets WHERE id = ?').get(req.params.id));
 });
 

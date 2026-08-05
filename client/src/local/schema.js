@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE TABLE IF NOT EXISTS budgets (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   category_id   INTEGER NOT NULL REFERENCES categories(id),
+  to_account_id INTEGER REFERENCES accounts(id),
   amount_cents  INTEGER NOT NULL,
   rollover      INTEGER NOT NULL DEFAULT 0,
   start_month   TEXT    NOT NULL DEFAULT (strftime('%Y-%m', 'now'))
