@@ -109,7 +109,8 @@ Set a monthly budget for any category, income or expense. Havoro compares actual
 - **Expected income** — the total of your income budgets, with the gap still to come
 - **Spent** — every expense this month, with the budgeted-category subtotal underneath
 - **Budgeted** — the total of your expense budgets
-- **Safe to spend** — income, minus what your budgets still commit you to, minus spending no budget covers
+- **Safe to spend** — income actually received, minus what your budgets still commit you to, minus spending no budget covers
+- **Once income lands** — the same figure with the pay you're still owed included, so early in the month a full month of commitments isn't being charged against a fraction of the income meant to cover it. Only shown once you've set expected income.
 
 A budgeted category commits whichever is larger: its budget, or what has actually gone out of it. Below budget the remainder is still expected to leave; over budget the real spend is the commitment. Money already spent inside a budget isn't charged twice.
 

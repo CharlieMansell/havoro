@@ -143,7 +143,7 @@ export default function Budget() {
 
       {/* Summary bar */}
       {s && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="card">
             <p className="label">Income</p>
             <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(s.total_income_cents)}</p>
@@ -193,6 +193,19 @@ export default function Budget() {
               </p>
             )}
           </div>
+          {/* Only meaningful once income is expected — without any, this is
+              identical to the figure beside it. */}
+          {s.total_income_budgeted_cents > 0 && (
+            <div className="card">
+              <p className="label">Once income lands</p>
+              <p className={`text-xl font-semibold ${s.projected_safe_to_spend_cents >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                {formatCents(s.projected_safe_to_spend_cents)}
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                on {formatCents(s.projected_income_cents)} income
+              </p>
+            </div>
+          )}
         </div>
       )}
 
