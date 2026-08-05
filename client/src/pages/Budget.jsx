@@ -222,6 +222,15 @@ export default function Budget() {
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">
+                    {/* The only way to see which transactions produced the
+                        figure — without it an unexpected total can't be
+                        traced back to the rows behind it. */}
+                    <Link
+                      className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1"
+                      to={`/transactions?category_id=${b.category_id}&budget_month=${month}`}
+                    >
+                      Review
+                    </Link>
                     <button
                       className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1"
                       onClick={() => { setEditBudget(b); setForm({ category_id: b.category_id, amount: (b.expected_cents / 100).toFixed(2), rollover: !!b.rollover }); setShowAdd(true); }}
@@ -298,6 +307,12 @@ export default function Budget() {
                   <ProgressBar value={b.spent_cents} max={b.amount_cents} showLabel />
                 </div>
                 <div className="flex gap-1 shrink-0">
+                  <Link
+                    className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1"
+                    to={`/transactions?category_id=${b.category_id}&budget_month=${month}`}
+                  >
+                    Review
+                  </Link>
                   <button
                     className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1"
                     onClick={() => { setEditBudget(b); setForm({ category_id: b.category_id, amount: (b.amount_cents / 100).toFixed(2), rollover: !!b.rollover }); setShowAdd(true); }}
