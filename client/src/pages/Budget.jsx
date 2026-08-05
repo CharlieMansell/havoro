@@ -143,10 +143,24 @@ export default function Budget() {
 
       {/* Summary bar */}
       {s && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <div className="card">
             <p className="label">Income</p>
             <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(s.total_income_cents)}</p>
+          </div>
+          <div className="card">
+            <p className="label">Expected income</p>
+            <p className="text-xl font-semibold text-slate-800 dark:text-slate-100">{formatCents(s.total_income_budgeted_cents)}</p>
+            {/* Received against expected is the whole point of the figure —
+                a month still owed a pay reads identically to a short one
+                without it. */}
+            {s.total_income_budgeted_cents > 0 && (
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                {s.total_income_cents < s.total_income_budgeted_cents
+                  ? `${formatCents(s.total_income_budgeted_cents - s.total_income_cents)} still to come`
+                  : `${formatCents(s.total_income_cents - s.total_income_budgeted_cents)} ahead`}
+              </p>
+            )}
           </div>
           <div className="card">
             <p className="label">Spent</p>
