@@ -150,6 +150,18 @@ router.get('/summary', (req, res) => {
   // make this negative and inflate what's left.
   const unbudgetedSpend = Math.max(0, totalSpend - totalSpent) + uncategorisedSpend;
 
+  // What the month looks like once the pay you're still owed arrives. Safe to
+  // spend counts money actually in, which on the 5th charges a whole month of
+  // commitments against a fraction of the income meant to cover them — true,
+  // but not the number you plan with.
+  //
+  // Per category, whichever is larger: still short of expected, the rest is
+  // still coming; already past it, the extra is real. Income no expectation
+  // accounted for is added as-is, since it has already arrived.
+  const projectedIncome =
+    incomeBudgetRows.reduce((s, b) => s + Math.max(b.expected_cents, b.received_cents), 0) +
+    unbudgetedIncome.reduce((s, r) => s + r.received_cents, 0);
+
   res.json({
     month,
     budgets: budgetRows,
@@ -167,6 +179,8 @@ router.get('/summary', (req, res) => {
       total_income_received_cents: totalIncomeReceived,
       unbudgeted_income_cents: unbudgetedIncome.reduce((s, r) => s + r.received_cents, 0),
       safe_to_spend_cents: (income.total || 0) - committedToBudgets - unbudgetedSpend,
+      projected_income_cents: projectedIncome,
+      projected_safe_to_spend_cents: projectedIncome - committedToBudgets - unbudgetedSpend,
     }
   });
 });
