@@ -18,16 +18,19 @@ export default function Budget() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editBudget, setEditBudget] = useState(null);
-  const [form, setForm] = useState({ category_id: '', amount: '', rollover: false });
+  const [form, setForm] = useState({ category_id: '', amount: '', rollover: false, to_account_id: '' });
+  const [accounts, setAccounts] = useState([]);
 
   const load = () => {
     setLoading(true);
     Promise.all([
       api.get(`/budgets/summary?month=${month}`),
       api.get('/categories'),
-    ]).then(([s, cats]) => {
+      api.get('/accounts'),
+    ]).then(([s, cats, accs]) => {
       setSummary(s);
       setCategories(cats);
+      setAccounts(accs);
     }).catch(console.error)
       .finally(() => setLoading(false));
   };
@@ -40,6 +43,7 @@ export default function Budget() {
       amount_cents: Math.round(parseFloat(form.amount) * 100),
       rollover: form.rollover ? 1 : 0,
       start_month: month,
+      to_account_id: form.to_account_id === '' ? null : Number(form.to_account_id),
     };
     try {
       if (editBudget) {
@@ -51,7 +55,7 @@ export default function Budget() {
       }
       setShowAdd(false);
       setEditBudget(null);
-      setForm({ category_id: '', amount: '', rollover: false });
+      setForm({ category_id: '', amount: '', rollover: false, to_account_id: '' });
       load();
     } catch (e) {
       toast.addToast(e.message, 'error');
@@ -108,7 +112,7 @@ export default function Budget() {
           value={month}
           onChange={e => setMonth(e.target.value)}
         />
-        <button className="btn-primary" onClick={() => { setShowAdd(true); setEditBudget(null); setForm({ category_id: '', amount: '', rollover: false }); }}>
+        <button className="btn-primary" onClick={() => { setShowAdd(true); setEditBudget(null); setForm({ category_id: '', amount: '', rollover: false, to_account_id: '' }); }}>
           + Add budget
         </button>
       </div>
@@ -260,7 +264,7 @@ export default function Budget() {
                     </Link>
                     <button
                       className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1"
-                      onClick={() => { setEditBudget(b); setForm({ category_id: b.category_id, amount: (b.expected_cents / 100).toFixed(2), rollover: !!b.rollover }); setShowAdd(true); }}
+                      onClick={() => { setEditBudget(b); setForm({ category_id: b.category_id, amount: (b.expected_cents / 100).toFixed(2), rollover: !!b.rollover, to_account_id: b.to_account_id ? String(b.to_account_id) : '' }); setShowAdd(true); }}
                     >
                       Edit
                     </button>
@@ -322,7 +326,12 @@ export default function Budget() {
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-0.5 mb-1.5">
-                    <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{b.category_name}</span>
+                    <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                      {b.category_name}
+                      {b.to_account_name && (
+                        <span className="ml-2 text-xs font-normal text-slate-400 dark:text-slate-500">→ {b.to_account_name}</span>
+                      )}
+                    </span>
                     <div className="flex items-center gap-4 text-sm">
                       <span className={over ? 'text-red-600 dark:text-red-400 font-medium' : 'text-slate-600 dark:text-slate-300'}>
                         {formatCents(b.spent_cents)}
@@ -342,7 +351,7 @@ export default function Budget() {
                   </Link>
                   <button
                     className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1"
-                    onClick={() => { setEditBudget(b); setForm({ category_id: b.category_id, amount: (b.amount_cents / 100).toFixed(2), rollover: !!b.rollover }); setShowAdd(true); }}
+                    onClick={() => { setEditBudget(b); setForm({ category_id: b.category_id, amount: (b.amount_cents / 100).toFixed(2), rollover: !!b.rollover, to_account_id: b.to_account_id ? String(b.to_account_id) : '' }); setShowAdd(true); }}
                   >
                     Edit
                   </button>
@@ -386,7 +395,7 @@ export default function Budget() {
                       className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline px-2 py-1"
                       onClick={() => {
                         setEditBudget(null);
-                        setForm({ category_id: String(u.category_id), amount: (u.spent_cents / 100).toFixed(2), rollover: false });
+                        setForm({ category_id: String(u.category_id), amount: (u.spent_cents / 100).toFixed(2), rollover: false, to_account_id: '' });
                         setShowAdd(true);
                       }}
                     >
@@ -429,6 +438,19 @@ export default function Budget() {
               <label className="label">Monthly amount ($)</label>
               <input type="number" className="input" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" step="1" min="0" />
             </div>
+            <div>
+              <label className="label">Transferred to</label>
+              {/* Tagging the line here is what lets the transfer planner derive
+                  itself — otherwise every amount has to be typed twice. */}
+              <select className="input" value={form.to_account_id ?? ''} onChange={e => setForm(f => ({ ...f, to_account_id: e.target.value }))}>
+                <option value="">Not assigned</option>
+                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Which account this money needs to be in. Groups on the Transfer Planner.
+              </p>
+            </div>
+
             <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
               <input type="checkbox" checked={form.rollover} onChange={e => setForm(f => ({ ...f, rollover: e.target.checked }))} className="rounded" />
               Roll over unspent amount each month

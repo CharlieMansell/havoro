@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatCents } from '../lib/utils';
 import { useToast } from '../contexts/ToastContext';
@@ -164,11 +165,12 @@ export default function Transfers() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [fromBudget, setFromBudget] = useState(null);
 
   const load = () => {
     setLoading(true);
-    Promise.all([api.get('/transfers'), api.get('/accounts')])
-      .then(([t, a]) => { setItems(t); setAccounts(a.filter(acc => !acc.archived)); })
+    Promise.all([api.get('/transfers'), api.get('/accounts'), api.get('/transfers/from-budget')])
+      .then(([t, a, fb]) => { setItems(t); setAccounts(a.filter(acc => !acc.archived)); setFromBudget(fb); })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
@@ -229,6 +231,58 @@ export default function Transfers() {
         </div>
         <button className="btn-primary shrink-0" onClick={() => setShowAdd(true)}>+ Add transfer</button>
       </div>
+
+      {/* Derived straight from the budget, so it can't drift the way a
+          hand-kept copy of the same numbers does. Only appears once budget
+          lines have been tagged with where their money goes. */}
+      {!loading && fromBudget?.groups?.length > 0 && (
+        <div className="card p-0">
+          <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-700 flex items-baseline justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">From your budget</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Every budget line tagged with a destination account. Change a budget and this follows.
+              </p>
+            </div>
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {formatCents(fromBudget.total_monthly_cents)}/mth
+            </span>
+          </div>
+
+          {fromBudget.groups.map(g => (
+            <details key={g.to_account_id} className="border-b border-slate-50 dark:border-slate-800 last:border-0">
+              <summary className="px-5 py-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{g.account_name}</span>
+                <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(g.monthly_cents)}</span>
+              </summary>
+              <div className="px-5 pb-3 space-y-1">
+                {g.items.map(it => (
+                  <div key={it.category_name} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 dark:text-slate-400">{it.category_name}</span>
+                    <span className="text-slate-500 dark:text-slate-400">{formatCents(it.amount_cents)}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ))}
+
+          {fromBudget.untagged && (
+            <div className="px-5 py-3 bg-amber-50 dark:bg-amber-900/20 border-t border-amber-100 dark:border-amber-800">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-amber-800 dark:text-amber-300">
+                  {fromBudget.untagged.items.length} budget{fromBudget.untagged.items.length === 1 ? '' : 's'} with no destination yet
+                </span>
+                <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  {formatCents(fromBudget.untagged.monthly_cents)}
+                </span>
+              </div>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                Set "Transferred to" on each from the <Link to="/budget" className="underline">Budget</Link> page and they'll appear above.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-4">
