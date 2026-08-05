@@ -71,6 +71,9 @@ export default function Budget() {
   };
 
   const expenseCats = categories.filter(c => c.kind === 'expense' && c.parent_id);
+  // Income categories are budgetable too — an expected salary rather than a
+  // spending cap — so the picker can't be expenses only any more.
+  const incomeCats = categories.filter(c => c.kind === 'income' && c.parent_id);
 
   if (loading) return (
     <div className="space-y-6">
@@ -179,6 +182,92 @@ export default function Budget() {
         </div>
       )}
 
+      {/* Income sits above the spending, because what came in is what the
+          rest of the page is dividing up. Read the other way round to an
+          expense budget: received against expected, and beating the target
+          is good rather than an overspend. */}
+      {(summary?.income_budgets?.length > 0 || summary?.unbudgeted_income?.length > 0) && (
+        <>
+          <div className="flex items-baseline gap-3 pt-2">
+            <h2 className="font-serif text-lg font-semibold text-slate-800 dark:text-slate-100">Income</h2>
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {formatCents(s.total_income_cents)} received
+              {s.total_income_budgeted_cents > 0 && <> of {formatCents(s.total_income_budgeted_cents)} expected</>}
+            </span>
+          </div>
+          <div className="card p-0 divide-y divide-slate-50 dark:divide-slate-800">
+            {summary.income_budgets.map(b => {
+              const short = b.received_cents < b.expected_cents;
+              return (
+                <div key={b.id} className="px-5 py-4 flex items-center gap-4">
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: b.category_color || '#94a3b8' }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-0.5 mb-1.5">
+                      <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{b.category_name}</span>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className={short ? 'text-slate-600 dark:text-slate-300' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>
+                          {formatCents(b.received_cents)}
+                        </span>
+                        <span className="text-slate-400 dark:text-slate-500">/</span>
+                        <span className="text-slate-500 dark:text-slate-400">{formatCents(b.expected_cents)}</span>
+                      </div>
+                    </div>
+                    {/* Capped at the target so the bar fills rather than
+                        turning red — exceeding expected income is a good month. */}
+                    <ProgressBar value={Math.min(b.received_cents, b.expected_cents)} max={b.expected_cents} showLabel />
+                    {short && b.remaining_cents > 0 && (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                        {formatCents(b.remaining_cents)} still expected
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1"
+                      onClick={() => { setEditBudget(b); setForm({ category_id: b.category_id, amount: (b.expected_cents / 100).toFixed(2), rollover: !!b.rollover }); setShowAdd(true); }}
+                    >
+                      Edit
+                    </button>
+                    <button className="text-xs text-red-400 hover:text-red-600 px-2 py-1" onClick={() => deleteBudget(b)}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {summary.unbudgeted_income.map(u => (
+              <div key={u.category_id} className="px-5 py-3 flex items-center gap-4">
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: u.category_color || '#94a3b8' }} />
+                <span className="text-sm font-medium text-slate-800 dark:text-slate-100 flex-1 min-w-0 truncate">
+                  {u.category_name}
+                  <span className="ml-2 text-xs font-normal text-slate-400 dark:text-slate-500">not expected</span>
+                </span>
+                <span className="text-sm text-emerald-600 dark:text-emerald-400 shrink-0">{formatCents(u.received_cents)}</span>
+                <div className="flex gap-1 shrink-0">
+                  <button
+                    className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline px-2 py-1"
+                    onClick={() => {
+                      setEditBudget(null);
+                      setForm({ category_id: String(u.category_id), amount: (u.received_cents / 100).toFixed(2), rollover: false });
+                      setShowAdd(true);
+                    }}
+                  >
+                    Set expected
+                  </button>
+                  <Link
+                    className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1"
+                    to={`/transactions?category_id=${u.category_id}&budget_month=${month}`}
+                  >
+                    Review
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       {/* Budget rows */}
       <h2 className="font-serif text-lg font-semibold text-slate-800 dark:text-slate-100 pt-2">Budgeted</h2>
       <div className="card p-0 divide-y divide-slate-50 dark:divide-slate-800">
@@ -285,7 +374,12 @@ export default function Budget() {
                 <label className="label">Category</label>
                 <select className="input" value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}>
                   <option value="">Select…</option>
-                  {expenseCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <optgroup label="Expense">
+                    {expenseCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </optgroup>
+                  <optgroup label="Income">
+                    {incomeCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </optgroup>
                 </select>
               </div>
             )}

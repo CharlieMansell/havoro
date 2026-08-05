@@ -67,14 +67,32 @@ router.get('/summary', (req, res) => {
     WHERE ${BUDGET_MONTH_SQL} = ? AND category_id IS NULL AND is_transfer = 0 AND amount_cents < 0
   `).get(month);
 
-  const budgetRows = budgets.map(b => ({
+  // Income budgets are an expectation, not a commitment — a $8,000 salary
+  // target is money coming in, and folding it into the spending maths below
+  // would have it eating the very budget it funds. Kept apart throughout.
+  const allBudgetRows = budgets.map(b => ({
     ...b,
     spent_cents: -(actualMap[b.category_id] || 0), // expenses are negative; flip sign for display
     remaining_cents: b.amount_cents - (-(actualMap[b.category_id] || 0)),
   }));
 
+  const budgetRows = allBudgetRows.filter(b => b.kind !== 'income');
+
+  // Income rows read the other way round: received against expected, and
+  // beating the target is good rather than an overspend.
+  const incomeBudgetRows = allBudgetRows
+    .filter(b => b.kind === 'income')
+    .map(b => ({
+      ...b,
+      received_cents: actualMap[b.category_id] || 0,
+      expected_cents: b.amount_cents,
+      remaining_cents: b.amount_cents - (actualMap[b.category_id] || 0),
+    }));
+
   const totalBudgeted = budgetRows.reduce((s, b) => s + b.amount_cents, 0);
   const totalSpent = budgetRows.reduce((s, b) => s + b.spent_cents, 0);
+  const totalIncomeBudgeted = incomeBudgetRows.reduce((s, b) => s + b.expected_cents, 0);
+  const totalIncomeReceived = incomeBudgetRows.reduce((s, b) => s + b.received_cents, 0);
 
   const totalSpend = -(spend.total || 0);
   const uncategorisedSpend = -(uncategorised.total || 0);
@@ -83,7 +101,7 @@ router.get('/summary', (req, res) => {
   // act on — budget the category, or go and recategorise what's in it —
   // rather than a total with no way in. Uncategorised is its own line at the
   // end, since it needs recategorising rather than a budget.
-  const budgetedIds = new Set(budgets.map(b => b.category_id));
+  const budgetedIds = new Set(allBudgetRows.map(b => b.category_id));
   const unbudgeted = db.prepare(`
     SELECT c.id as category_id, c.name as category_name, c.color as category_color,
            SUM(t.amount_cents) as total
@@ -95,6 +113,19 @@ router.get('/summary', (req, res) => {
   `).all(month)
     .filter(r => !budgetedIds.has(r.category_id))
     .map(r => ({ ...r, spent_cents: -r.total, total: undefined }));
+
+  // The same question on the income side: money arriving that no expected
+  // figure accounts for — a bonus, a refund, or something in the wrong
+  // category entirely.
+  const unbudgetedIncome = db.prepare(`
+    SELECT c.id as category_id, c.name as category_name, c.color as category_color,
+           SUM(t.amount_cents) as received_cents
+    FROM transactions t
+    JOIN categories c ON c.id = t.category_id
+    WHERE ${BUDGET_MONTH_SQL} = ? AND c.kind = 'income' AND t.is_transfer = 0
+    GROUP BY c.id
+    ORDER BY received_cents DESC
+  `).all(month).filter(r => !budgetedIds.has(r.category_id));
 
   if (uncategorisedSpend > 0) {
     unbudgeted.push({
@@ -122,7 +153,9 @@ router.get('/summary', (req, res) => {
   res.json({
     month,
     budgets: budgetRows,
+    income_budgets: incomeBudgetRows,
     unbudgeted,
+    unbudgeted_income: unbudgetedIncome,
     summary: {
       total_income_cents: income.total || 0,
       total_spend_cents: totalSpend,
@@ -130,6 +163,9 @@ router.get('/summary', (req, res) => {
       total_spent_cents: totalSpent,
       uncategorised_spend_cents: uncategorisedSpend,
       unbudgeted_spend_cents: unbudgetedSpend,
+      total_income_budgeted_cents: totalIncomeBudgeted,
+      total_income_received_cents: totalIncomeReceived,
+      unbudgeted_income_cents: unbudgetedIncome.reduce((s, r) => s + r.received_cents, 0),
       safe_to_spend_cents: (income.total || 0) - committedToBudgets - unbudgetedSpend,
     }
   });
