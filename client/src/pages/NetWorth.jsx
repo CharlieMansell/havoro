@@ -86,7 +86,8 @@ export default function NetWorth() {
 
       <div className="card">
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">History</h2>
-        {history.length > 1 ? (
+        {/* Shows from the first check-in — see the note in Dashboard.jsx. */}
+        {history.length > 0 ? (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={history}>
               <XAxis dataKey="date" tick={{ fontSize: 11, fill: resolvedTheme === 'dark' ? '#94a3b8' : undefined }} />
@@ -99,7 +100,7 @@ export default function NetWorth() {
                 labelStyle={resolvedTheme === 'dark' ? { color: '#f1f5f9' } : undefined}
                 itemStyle={resolvedTheme === 'dark' ? { color: '#f1f5f9' } : undefined}
               />
-              <Line type="monotone" dataKey="net_worth_cents" stroke="#10b981" strokeWidth={2} dot={false} name="Net worth" />
+              <Line type="monotone" dataKey="net_worth_cents" stroke="#10b981" strokeWidth={2} dot={history.length === 1} name="Net worth" />
             </LineChart>
           </ResponsiveContainer>
         ) : (

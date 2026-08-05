@@ -114,7 +114,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card lg:col-span-2">
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">Net worth history</h2>
-          {data.net_worth_history?.length > 1 ? (
+          {/* One check-in is history — it just isn't a trend yet. Requiring
+              two hid the check-in that had just been completed and told the
+              user to go and do it, which is the one thing they had done. */}
+          {data.net_worth_history?.length > 0 ? (
             <ResponsiveContainer width="100%" height={140}>
               <LineChart data={data.net_worth_history}>
                 <XAxis dataKey="date" hide />
@@ -127,7 +130,9 @@ export default function Dashboard() {
                   labelStyle={resolvedTheme === 'dark' ? { color: '#f1f5f9' } : undefined}
                   itemStyle={resolvedTheme === 'dark' ? { color: '#f1f5f9' } : undefined}
                 />
-                <Line type="monotone" dataKey="net_worth" stroke="#10b981" strokeWidth={2} dot={false} />
+                {/* A single point draws nothing without a dot — a line needs
+                    two ends. */}
+                <Line type="monotone" dataKey="net_worth" stroke="#10b981" strokeWidth={2} dot={data.net_worth_history.length === 1} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
