@@ -34,21 +34,35 @@ Havoro only accepts bank-exported CSVs — it never connects directly to your ba
 3. Select your bank profile (ANZ, NAB, Westpac, CommBank included)
 4. Preview the parsed rows, then confirm
 
-Transactions are deduplicated on import using a hash of date + description + amount, so re-importing the same file is safe.
+Transactions are deduplicated on import using a hash of account + date + description + amount, so re-importing an overlapping export is safe — only genuinely new rows are added. Two separate purchases that happen to match on all four (two coffees at the same shop on the same day) are both kept.
+
+Check the preview before confirming: dates should look like dates, descriptions like descriptions, and money coming in should be positive. That's the fastest way to catch a bank changing its export format.
 
 **Adding a new bank profile:** See [TECHNICAL.md — Bank CSV profiles](TECHNICAL.md#bank-csv-profiles).
 
 ### Categorising
 
-Transactions come in uncategorised. Havoro auto-categorises using **rules** (Settings → Categorisation rules):
+Transactions come in uncategorised. Havoro auto-categorises using **rules** (Settings → Categorisation rules). Each rule has a match type:
 
-- **Contains** — description contains a string (e.g. "WOOLWORTHS" → Groceries)
-- **Starts with** — description starts with a string
+- **Contains** — the field contains a string (e.g. "WOOLWORTHS" → Groceries)
+- **Starts with** — the field starts with a string
 - **Regex** — full regular expression match
+
+**Match on** decides which field is tested, because banks export different things:
+
+- **Description** — the raw statement line. Always available.
+- **Merchant** — a tidied merchant name or payment reference, where the bank provides one (NAB's Merchant Name, ANZ's payment reference).
+- **Bank category** — the bank's own categorisation, where it provides one (NAB, Westpac). One rule maps a whole bank category to a Havoro one.
+
+A rule with no field data on a transaction simply doesn't apply, so field-specific rules for one bank can't mis-fire on another's rows.
+
+**Account** optionally limits a rule to one account. Worth using for bank-category rules, since banks' vocabularies overlap — Westpac's `PAYMENT` against NAB's `Payments` — and an unscoped rule would claim both.
 
 Rules have a priority (lower = higher priority) and can be enabled/disabled individually. 20 starter rules are seeded on first run.
 
-For one-off transactions, click the transaction, choose a category, and optionally click **Suggest rule** to auto-generate a rule based on that description.
+For one-off transactions, click the transaction, choose a category, and optionally click **Suggest rule**. The suggestion picks the field it drew the pattern from, so a rule built from a merchant name matches the merchant rather than the statement line it would never have matched.
+
+Clicking a transaction also shows what the bank actually sent — the raw description, plus merchant and bank category when present — which is what a rule can match against.
 
 ### Filters
 
@@ -58,7 +72,24 @@ The transaction list can be filtered by:
 - Category
 - Date range
 - Free-text search (matches description and notes)
+- **Bank category** — only shown once a bank that exports its own categories has been imported
 - **Needs review** — shows only uncategorised, non-transfer transactions
+
+Links from the Budget page arrive with a budget-month filter applied, shown as a clearable chip, so the list matches the figure you clicked exactly.
+
+### Deleting
+
+Open a transaction and click **Delete**, or tick several and use **Delete** in the selection bar. Selection survives paging, and **Select all N** picks up every transaction matching the current filters, not just the visible page.
+
+Deleting frees the transaction's import hash, so re-importing the statement it came from brings it back — the way out of a mistake.
+
+### Which month a transaction counts toward
+
+Monthly pay usually lands on the last working day, so a salary dated 31 July is the money that funds August. Left alone, July would show two pays and August none.
+
+Every transaction has a **Counts toward** month, defaulting to the month of its own date. Income arriving in the last few days of a month is moved forward automatically at import; expenses are never moved. Anything shifted is marked in the list with a small `→ Aug` next to its date.
+
+Override it on any transaction, or across a selection using the month picker in the selection bar. The transaction's actual date never changes — only which month's budget and dashboard it counts toward.
 
 ### Transfers
 
@@ -70,17 +101,29 @@ Transactions that move money between your own accounts (e.g. salary into savings
 
 ![Budget](images/budget.png)
 
-Set a monthly budget for any category. Havoro compares actuals from imported transactions against your budget and shows:
+Set a monthly budget for any category, income or expense. Havoro compares actuals from imported transactions against it.
 
-- Amount budgeted and spent per category
-- Remaining (green) or over-budget (red) amount
-- **Safe to spend** — income minus total budgeted spend
-- Total income and expense for the month
-- Uncategorised spend (as a reminder to review)
+**The summary row:**
+
+- **Income** — what actually arrived this month
+- **Expected income** — the total of your income budgets, with the gap still to come
+- **Spent** — every expense this month, with the budgeted-category subtotal underneath
+- **Budgeted** — the total of your expense budgets
+- **Safe to spend** — income, minus what your budgets still commit you to, minus spending no budget covers
+
+A budgeted category commits whichever is larger: its budget, or what has actually gone out of it. Below budget the remainder is still expected to leave; over budget the real spend is the commitment. Money already spent inside a budget isn't charged twice.
+
+**Income** comes first, since what arrived is what the rest of the page divides up. Each income category shows received against expected, and the bar fills toward the target rather than turning red — beating expected income is a good month. Income arriving in a category with no expectation set is listed underneath as *not expected*.
+
+**Budgeted** lists your expense budgets, spent against budgeted.
+
+**Unbudgeted** lists every expense category with spending this month and no budget against it, biggest first, with uncategorised at the end. Each line offers **Add budget** — which opens the form with the amount prefilled to what you actually spent — or **Review**, to see the transactions behind it. Work the list down and it empties.
+
+Every row has **Review**, which opens the transactions that produced its figure.
 
 Budgets can optionally **roll over** — any unspent amount carries forward to the next month's budget.
 
-Navigate between months using the arrows at the top of the page.
+Pick the month with the month selector at the top of the page.
 
 ---
 
@@ -162,14 +205,9 @@ Track individual stock/ETF holdings inside a portfolio account. Expand any share
 
 ### Property valuations
 
-Track how a property's value has changed over time. Add a valuation with:
+**Not yet implemented.** The database has a table for valuation history — date, value, source and confidence — but there is no UI or API behind it, and no automatic lookup.
 
-- Date
-- Value
-- Source (manual, Domain, VG Land)
-- Confidence level
-
-The latest valuation is used as the account's current balance for net-worth calculations.
+For now, set a property's value by editing the account balance directly, or during a check-in.
 
 ### Balance projections
 
@@ -253,7 +291,9 @@ Default annual growth rates used for future balance projections (cash, shares, p
 
 ### Categorisation rules
 
-Create, edit, enable/disable, and delete auto-categorisation rules. Rules are applied in priority order (lower number = higher priority) and the first match wins.
+Create, edit, enable/disable, and delete auto-categorisation rules. Each rule sets which field it matches on (description, merchant, or the bank's own category) and can be limited to a single account. Rules are applied in priority order (lower number = higher priority) and the first match wins.
+
+**Apply rules** re-runs them against transactions that are still uncategorised. It never touches a category you picked by hand.
 
 ### Categories
 

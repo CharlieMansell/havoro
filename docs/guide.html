@@ -211,12 +211,14 @@
   <!-- ─────────────────────────────────────────────── -->
   <h2 id="importing">4. Importing &amp; categorising like it's no effort</h2>
   <h3>Getting the CSV</h3>
-  <p>Log in to your bank's website (not the app; the export option usually lives on the desktop site), find the transaction export, and pick CSV format. ANZ, NAB, Westpac, and CommBank exports are recognised automatically. Export a whole month or more at once; overlapping date ranges are safe, because Havoro detects and skips duplicates on import.</p>
+  <p>Log in to your bank's website (not the app; the export option usually lives on the desktop site), find the transaction export, and pick CSV format. ANZ, NAB, Westpac, and CommBank exports are recognised automatically. Export a whole month or more at once; overlapping date ranges are safe, because Havoro detects and skips duplicates on import. Check the preview before confirming: dates should read as dates, descriptions as descriptions, and money coming in should be positive. That is the quickest way to spot a bank quietly changing its export format.</p>
 
   <h3>Categorising fast</h3>
   <ul>
     <li>The badge on the Transactions nav shows how many still need attention. Work it to zero: it's oddly satisfying.</li>
-    <li>Let the rules do the work. Built-in rules already catch supermarkets, fuel, streaming, and takeaway. When you categorise something the rules missed, add a rule for it (Settings, under Categorisation rules), since a merchant you buy from weekly should only ever be categorised by hand once.</li>
+    <li>Let the rules do the work. Built-in rules already catch supermarkets, fuel, streaming, and takeaway. When you categorise something the rules missed, accept the rule Havoro offers, since a merchant you buy from weekly should only ever be categorised by hand once.</li>
+    <li>Rules can match more than the statement line. Some banks export a tidy merchant name or their own category alongside the raw description, and a rule can match whichever of those is cleanest. A single rule mapping NAB's "Utilities" to yours beats guessing at merchant strings. Pin those rules to the account they came from, though, since banks reuse each other's words.</li>
+    <li>Fix in bulk, not one at a time. Tick a run of transactions and set the category for all of them at once. Selection survives paging, and "Select all" takes everything matching your current filters, not just what's on screen.</li>
     <li>After two or three imports, expect 80-90% of transactions to categorise themselves. That's the point where maintaining Havoro drops to minutes.</li>
   </ul>
 
@@ -229,7 +231,10 @@
     <li>Budget from data, not aspiration. After a month of categorised transactions, set each category's budget at roughly what you actually spend. Get the tracking habit first; tighten later. A budget you blow through in week two teaches you nothing except to stop looking.</li>
     <li>Turn rollover on for lumpy categories, off for steady ones. Enable "roll over unspent amount" for categories that arrive in lumps (car maintenance, gifts, clothing) so quiet months bank credit for the loud ones. Keep it off for groceries and dining out, where a fresh monthly cap is the discipline.</li>
     <li>Big irregular bills don't belong in the monthly budget. Rates, insurance, Christmas, car rego: put them in <strong>Goals as sinking funds</strong> instead. Havoro calculates the monthly set-aside so the annual bill is boring when it arrives, and the Transfer Planner folds it into your payday sweep.</li>
-    <li>Watch "Safe to spend": income minus budgeted commitments, the number that answers "can we afford to say yes to this weekend?"</li>
+    <li>Budget your income too, not just your spending. Set what you expect each pay to be, and a month that comes in light stops looking like a month that simply hasn't been paid yet. Anything arriving that you did not expect gets listed separately, which is usually where a miscategorised transfer turns up.</li>
+    <li>Work the Unbudgeted list down. Everything you spent that no budget covers is listed there, biggest first. Each line either wants a budget (one click, prefilled with what you actually spent) or has transactions in the wrong category, and Review shows you which.</li>
+    <li>Watch "Safe to spend": what arrived, minus what your budgets still commit you to, minus spending nothing covers. It answers "can we afford to say yes to this weekend?" Budgeting something you have already paid for will not move it, because the money is only counted once.</li>
+    <li>If you are paid at the end of the month for the month ahead, Havoro already moves it. A salary landing on the 31st counts toward the next month rather than doubling up the one it arrived in. Anything shifted is marked in the transaction list, and you can move any transaction yourself with "Counts toward".</li>
   </ul>
 
   <!-- ─────────────────────────────────────────────── -->
