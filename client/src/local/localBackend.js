@@ -1,10 +1,12 @@
 // On-device backend for the iOS proof-of-concept.
 //
 // Replaces the Express server with the same API surface implemented against
-// a local SQLite database (sql.js WASM in the browser/PoC; swap the storage
-// driver for @capacitor-community/sqlite on a real device). Installed by
-// main.jsx when VITE_LOCAL_BACKEND=1 — it wraps window.fetch and answers
-// /api/* requests locally, so the React app runs unchanged with no server.
+// a local SQLite database (sql.js WASM). Installed by main.jsx when
+// VITE_LOCAL_BACKEND=1 — it wraps window.fetch and answers /api/* requests
+// locally, so the React app runs unchanged with no server.
+//
+// Where the database is kept is storage.js's problem: localStorage in a
+// browser, a file in the app's data directory on iOS.
 //
 // SQL is ported from server/routes/* — keep the two in sync when routes change.
 
@@ -12,8 +14,8 @@ import initSqlJs from 'sql.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { SCHEMA_SQL } from './schema.js';
 import { BANK_PROFILES, parseBankCSV, importHash } from './csvImport.js';
+import { loadDatabase, schedulePersist, flushPending } from './storage.js';
 
-const STORAGE_KEY = 'hl_local_db_v1';
 const LOCAL_USER = { id: 1, name: 'You', email: 'on-this-device', is_admin: 1 };
 
 let db = null;
@@ -36,29 +38,14 @@ function run(sql, params = []) {
   return { lastInsertRowid };
 }
 
+// Handing the export to storage.js rather than writing it here — on a device
+// the destination is a file and the write is async, which this call site
+// (invoked from synchronous query helpers) can't wait on. See storage.js.
 function persist() {
   try {
-    const bytes = db.export();
-    let bin = '';
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    }
-    localStorage.setItem(STORAGE_KEY, btoa(bin));
+    schedulePersist(db.export());
   } catch (e) {
-    console.warn('[local] persist failed:', e);
-  }
-}
-
-function loadPersisted(SQL) {
-  const b64 = localStorage.getItem(STORAGE_KEY);
-  if (!b64) return null;
-  try {
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new SQL.Database(bytes);
-  } catch {
-    return null;
+    console.warn('[local] export failed:', e);
   }
 }
 
@@ -549,12 +536,15 @@ function handle(method, path, query, body) {
 // ── fetch interception ──────────────────────────────────────────────────────
 export async function installLocalBackend() {
   const SQL = await initSqlJs({ locateFile: () => wasmUrl });
-  db = loadPersisted(SQL);
+  const saved = await loadDatabase();
+  db = saved ? new SQL.Database(saved) : null;
   if (!db) {
     db = new SQL.Database();
     db.run(SCHEMA_SQL);
     seed();
-    persist();
+    // Straight to disk: a fresh database with nothing in it still needs to
+    // exist before the first query, or a crash on launch loses the seed.
+    await flushPending();
   }
 
   const nativeFetch = window.fetch.bind(window);
