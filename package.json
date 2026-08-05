@@ -9,7 +9,7 @@
     "install:all": "npm install && npm install --prefix server && npm install --prefix client"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
+    "concurrently": "^10.0.4"
   },
   "overrides": {
     "shell-quote": "^1.10.0"
