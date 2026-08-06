@@ -39,6 +39,41 @@ jobs:
       - name: Build web assets and sync Capacitor
         run: npm run build:ios
 
+      # Without this, a missing secret surfaces as an xcodebuild signing
+      # error hundreds of lines into a log, which is a miserable way to
+      # discover you pasted the Issuer ID into the Key ID box.
+      - name: Check the Apple credentials are present
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          fail=0
+          for name in KEY_ID ISSUER_ID KEY_P8 TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing secret for $name — see docs/IOS.md"
+              fail=1
+            fi
+          done
+
+          # The two IDs are easy to transpose, and they look nothing alike:
+          # the issuer is a UUID, the key id is a short alphanumeric string.
+          if [ -n "$ISSUER_ID" ] && ! echo "$ISSUER_ID" | grep -Eq '^[0-9a-fA-F-]{36}$'; then
+            echo "::error::APPSTORE_ISSUER_ID should be a UUID. Did the Key ID go in this box?"
+            fail=1
+          fi
+          if [ -n "$KEY_P8" ] && ! echo "$KEY_P8" | grep -q 'BEGIN PRIVATE KEY'; then
+            echo "::error::APPSTORE_PRIVATE_KEY must be the whole .p8 file, BEGIN/END lines included"
+            fail=1
+          fi
+          if [ -n "$TEAM_ID" ] && [ "${#TEAM_ID}" -ne 10 ]; then
+            echo "::error::APPLE_TEAM_ID should be 10 characters, e.g. A1B2C3D4E5"
+            fail=1
+          fi
+
+          [ "$fail" -eq 0 ] && echo "All four credentials look right." || exit 1
+
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
@@ -99,6 +134,9 @@ jobs:
             -authenticationKeyIssuerID "$ISSUER_ID"
 
       - name: Upload to TestFlight
+        # A build that archived and exported but failed to upload has done all
+        # the expensive work — the .ipa is kept below either way, so the
+        # upload can be retried without another eight minutes of compiling.
         env:
           KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
@@ -113,6 +151,17 @@ jobs:
             --file "$IPA" \
             --apiKey "$KEY_ID" \
             --apiIssuer "$ISSUER_ID"
+
+      - name: Say what happens next
+        run: |
+          {
+            echo "### Uploaded to App Store Connect"
+            echo
+            echo "Version **${{ steps.version.outputs.version }}**, build **${{ github.run_number }}**."
+            echo
+            echo "Processing usually takes 5–30 minutes before the build appears in TestFlight."
+            echo "Internal testers need no review — add yourself under TestFlight → Internal Testing."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Keeping the .ipa means a failed upload doesn't cost a whole rebuild,
       # and gives you something to inspect when signing goes wrong.

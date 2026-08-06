@@ -73,24 +73,72 @@ Apple hardware involved.
 TestFlight cannot be reached with a free Apple ID, and no CI arrangement gets
 around that.
 
-Set-up, once:
+#### Set-up, once
 
-1. Join the [Apple Developer Program](https://developer.apple.com/programs/)
-2. In App Store Connect, create an app record with bundle id `com.havoro.app`
-3. **Users and Access → Integrations → App Store Connect API**, create a key
-   with the **App Manager** role, and download the `.p8`. You only get to
-   download it once.
-4. Add three repository secrets under **Settings → Secrets and variables →
-   Actions**:
+**1. Enrol in the Apple Developer Program** — [developer.apple.com/programs/enroll](https://developer.apple.com/programs/enroll/)
 
-   | Secret | Where it comes from |
-   |---|---|
-   | `APPSTORE_KEY_ID` | Shown next to the key you created |
-   | `APPSTORE_ISSUER_ID` | At the top of the same API keys page |
-   | `APPSTORE_PRIVATE_KEY` | The whole `.p8` file contents, `BEGIN`/`END` lines included |
-   | `APPLE_TEAM_ID` | Apple Developer → Membership details |
+Choose **Individual** unless you have a registered company; Organization
+enrolment needs a D-U-N-S number and takes considerably longer. Your Apple ID
+needs two-factor authentication on. Identity verification is usually done
+through the Apple Developer app on an iPhone, so have the phone handy.
+US$99/year, auto-renewing. Approval is often same-day for individuals but can
+take a couple of days.
 
-5. **Actions → iOS TestFlight → Run workflow**
+**2. Register the bundle identifier** — Developer portal → **Certificates,
+Identifiers & Profiles → Identifiers → +** → App IDs → App → Explicit, and
+enter `com.havoro.app`. It must match `capacitor.config.json`.
+
+**3. Create the app record** — App Store Connect → **Apps → +** → New App.
+Pick iOS, select the bundle id from step 2, and give it an SKU (any internal
+string). The **name has to be unique across the entire App Store**, so
+"Havoro" may already be taken — the name here is only what appears in the
+store listing, not on the phone, so pick anything free.
+
+**4. Create an API key** — App Store Connect → **Users and Access →
+Integrations → App Store Connect API → Team Keys → +**. Give it the
+**App Manager** role and generate it.
+
+Download the `.p8` immediately — **Apple lets you download it exactly once**.
+Note the **Key ID** shown beside it and the **Issuer ID** at the top of the
+page.
+
+**5. Find your Team ID** — Developer portal → **Membership details**. Ten
+characters, something like `A1B2C3D4E5`.
+
+**6. Add four repository secrets** — GitHub → **Settings → Secrets and
+variables → Actions → New repository secret**:
+
+| Secret | Value |
+|---|---|
+| `APPSTORE_KEY_ID` | The Key ID from step 4 |
+| `APPSTORE_ISSUER_ID` | The Issuer ID from step 4 |
+| `APPSTORE_PRIVATE_KEY` | The entire contents of the `.p8`, including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines |
+| `APPLE_TEAM_ID` | The Team ID from step 5 |
+
+Paste the `.p8` exactly as it is — line breaks and all. GitHub stores it
+encrypted and masks it in logs.
+
+**7. Run it** — Actions → **iOS TestFlight → Run workflow**.
+
+#### After the upload
+
+The build does not appear in TestFlight immediately: App Store Connect
+processes it first, usually 5 to 30 minutes, and emails you if it rejects it.
+
+**Internal testers** — up to 100 people on your own team, which includes you —
+need no review and can install as soon as processing finishes. Add yourself
+under TestFlight → Internal Testing and the invite arrives in the TestFlight
+app.
+
+**External testers** need Beta App Review, which is a real review against the
+App Store guidelines and takes a day or so. Not worth bothering with until the
+placeholder icons are replaced.
+
+`ITSAppUsesNonExemptEncryption` is already set in `Info.plist`, which is what
+stops App Store Connect asking the export-compliance question by hand on every
+upload and holding the build until answered. It declares that the app uses no
+encryption beyond the HTTPS iOS itself provides — true of Havoro, which calls
+GitHub for updates and a price API and ships no cryptography of its own.
 
 The build number comes from the workflow run number, which only ever goes up —
 TestFlight rejects a build number it has already seen. The marketing version
