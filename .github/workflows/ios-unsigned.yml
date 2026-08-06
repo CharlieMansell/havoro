@@ -1,0 +1,112 @@
+# Builds the iOS app with no Apple Developer account at all.
+#
+# Two outputs, neither of which costs anything:
+#
+#   1. A screenshot of the app running in the iOS Simulator, which is the
+#      cheapest possible proof that it compiles, launches and renders.
+#   2. An unsigned .ipa, which Sideloadly or AltStore can re-sign on Windows
+#      with a free Apple ID and install on a real iPhone. Free-ID installs
+#      expire after 7 days and have to be reinstalled.
+#
+# TestFlight needs the paid programme — see ios-testflight.yml for that path.
+#
+# NOT YET RUN. Written from documented behaviour, not from a green build.
+
+name: iOS build (unsigned)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'client/**'
+      - 'capacitor.config.json'
+      - '.github/workflows/ios-unsigned.yml'
+
+jobs:
+  build:
+    name: Simulator smoke test and unsigned .ipa
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix client
+
+      - name: Build web assets and sync Capacitor
+        run: npm run build:ios
+
+      # ── 1. Does it actually run? ──────────────────────────────────────────
+      # A simulator build needs no signing whatsoever, so this part works
+      # with no Apple account of any kind.
+      - name: Build for the simulator
+        run: |
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Launch it and take a screenshot
+        run: |
+          DEVICE=$(xcrun simctl create havoro-test \
+            "$(xcrun simctl list devicetypes | grep -o 'com.apple.CoreSimulator.SimDeviceType.iPhone-16' | head -1)" \
+            "$(xcrun simctl list runtimes | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-[0-9-]*' | tail -1)")
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl install "$DEVICE" \
+            "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          xcrun simctl launch "$DEVICE" com.havoro.app
+          # The web view needs a moment to boot sql.js, seed the database and
+          # render — screenshotting immediately catches a white screen.
+          sleep 20
+          xcrun simctl io "$DEVICE" screenshot "$RUNNER_TEMP/havoro-launch.png"
+          xcrun simctl shutdown "$DEVICE"
+
+      - name: Upload screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshot
+          path: ${{ runner.temp }}/havoro-launch.png
+          if-no-files-found: warn
+
+      # ── 2. Something installable on a real phone ──────────────────────────
+      # Archived with signing off, then packaged by hand: an .ipa is just a
+      # zip with the .app inside a Payload directory. Sideloadly re-signs it
+      # with your own free Apple ID at install time, which is why this
+      # doesn't need a certificate here.
+      - name: Archive for device, unsigned
+        run: |
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Havoro.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS=""
+
+      - name: Package as .ipa
+        run: |
+          cd "$RUNNER_TEMP"
+          mkdir -p Payload
+          cp -R Havoro.xcarchive/Products/Applications/App.app Payload/
+          zip -qr Havoro-unsigned.ipa Payload
+          ls -lh Havoro-unsigned.ipa
+
+      - name: Upload unsigned .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: havoro-unsigned-ipa
+          path: ${{ runner.temp }}/Havoro-unsigned.ipa

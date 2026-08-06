@@ -105,6 +105,37 @@ Apple's and GitHub's documented behaviour, not from a green build. The `.ipa`
 is kept as an artifact even on failure so a broken upload doesn't cost a whole
 rebuild.
 
+### Testing without paying Apple anything
+
+Three routes, in increasing order of how much they prove:
+
+**1. The PWA, right now, zero setup.** The client is already a progressive web
+app. Run the server (Docker, or the desktop app on your network), open it in
+Safari on the phone and *Share → Add to Home Screen*. That tests the whole
+interface on a real phone today. What it does not test is the native shell or
+the on-device database — it's still talking to your server.
+
+**2. Simulator screenshot in CI.** `.github/workflows/ios-unsigned.yml` builds
+for the simulator, boots it, launches the app and uploads a screenshot as an
+artifact. A simulator build needs no signing at all, so this works with no
+Apple account of any kind. It's the cheapest proof that the thing compiles,
+launches and renders — which nothing has confirmed yet.
+
+**3. Unsigned .ipa, sideloaded to your own phone.** The same workflow archives
+with signing disabled and packages an `.ipa` (which is only a zip with the
+`.app` inside a `Payload/` directory). Download the artifact, then use
+[Sideloadly](https://sideloadly.io/) or AltStore on Windows to re-sign it with
+your **free** Apple ID and install it over USB.
+
+The catch is Apple's, not ours: a free Apple ID signs for **7 days**, after
+which the app stops opening and has to be reinstalled. You're also limited to
+three sideloaded apps at once. AltStore can refresh automatically over Wi-Fi if
+you leave AltServer running on the PC, which takes the sting out of it.
+
+That third route runs the real native build, with the real on-device database,
+on real hardware — everything TestFlight would give you except distribution to
+other people and builds that last longer than a week.
+
 ### On macOS, the first time
 
 1. Xcode 15 or newer, from the App Store
