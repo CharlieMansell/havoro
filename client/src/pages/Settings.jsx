@@ -105,7 +105,7 @@ function CheckInPanel({ toast }) {
 }
 
 function BackupPanel({ toast, confirm, isAdmin }) {
-  const { isElectron } = useAuth();
+  const { isElectron, isOnDevice } = useAuth();
   const [backups, setBackups] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [running, setRunning] = useState(false);
@@ -113,6 +113,7 @@ function BackupPanel({ toast, confirm, isAdmin }) {
   const [schedule, setSchedule] = useState('02:00');
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const fileInputRef = useRef(null);
 
   const loadBackups = () => {
@@ -129,12 +130,14 @@ function BackupPanel({ toast, confirm, isAdmin }) {
     // per day on launch instead (see backupScheduler.js), since a cron only
     // fires if the app happens to be open at that exact moment, which for a
     // normal desktop app usage pattern may rarely or never actually happen.
-    if (isAdmin && !isElectron) {
+    // The on-device build has no scheduler at all, for the same reason twice
+    // over: nothing is running when the app is closed.
+    if (isAdmin && !isElectron && !isOnDevice) {
       api.get('/settings/backup-schedule')
         .then(r => setSchedule(cronToTime(r.cron)))
         .catch(console.error);
     }
-  }, [isAdmin, isElectron]);
+  }, [isAdmin, isElectron, isOnDevice]);
 
   const runNow = async () => {
     setRunning(true);
@@ -149,10 +152,17 @@ function BackupPanel({ toast, confirm, isAdmin }) {
     }
   };
 
+  // The server restarts the process to pick up the restored file, and Docker
+  // needs a moment to bring it back. On-device there is no process to restart:
+  // the database has already been swapped by the time the request returns, and
+  // the reload is only there to clear out components holding the old data.
+  const restartNote = isOnDevice ? 'The app will reload.' : 'The app will restart automatically.';
+  const reloadAfter = () => setTimeout(() => window.location.reload(), isOnDevice ? 400 : 5000);
+
   const restore = async (filename) => {
     const ok = await confirm({
       title: `Restore from ${filename}?`,
-      message: 'All data since this backup was taken will be lost. The app will restart automatically.',
+      message: `All data since this backup was taken will be lost. ${restartNote}`,
       confirmLabel: 'Restore',
       danger: true,
     });
@@ -160,12 +170,29 @@ function BackupPanel({ toast, confirm, isAdmin }) {
     setRestoring(filename);
     try {
       await api.post(`/settings/restore/${filename}`, {});
-      toast.addToast('Restoring… the app will restart in a moment', 'info');
-      // Give Docker 3s to restart, then reload
-      setTimeout(() => window.location.reload(), 5000);
+      toast.addToast('Restoring…', 'info');
+      reloadAfter();
     } catch (e) {
       toast.addToast(e.message, 'error');
       setRestoring(null);
+    }
+  };
+
+  // Writes a copy somewhere the user can actually reach — the Files app on
+  // iOS, an ordinary download in a browser. Without this the on-device
+  // database is a one-way trip: importable, but never recoverable off the
+  // phone if the phone is what goes missing.
+  const exportDb = async () => {
+    setExporting(true);
+    try {
+      const res = await api.post('/settings/export', {});
+      toast.addToast(res.where === 'files-app'
+        ? `Saved ${res.filename} — Files app, under On My iPhone → Havoro`
+        : `Downloading ${res.filename}`);
+    } catch (e) {
+      toast.addToast(e.message, 'error');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -178,7 +205,7 @@ function BackupPanel({ toast, confirm, isAdmin }) {
 
     const ok = await confirm({
       title: `Restore from ${file.name}?`,
-      message: 'This replaces all current data with what\'s in that file. The app will restart automatically.',
+      message: `This replaces all current data with what's in that file. ${restartNote}`,
       confirmLabel: 'Restore',
       danger: true,
     });
@@ -189,8 +216,8 @@ function BackupPanel({ toast, confirm, isAdmin }) {
       const fd = new FormData();
       fd.append('file', file);
       await api.upload('/settings/restore-upload', fd);
-      toast.addToast('Restoring… the app will restart in a moment', 'info');
-      setTimeout(() => window.location.reload(), 5000);
+      toast.addToast('Restoring…', 'info');
+      reloadAfter();
     } catch (e) {
       toast.addToast(e.message, 'error');
       setImporting(false);
@@ -217,11 +244,25 @@ function BackupPanel({ toast, confirm, isAdmin }) {
         <div className="flex items-center gap-2">
           {isAdmin && (
             <>
-              <input ref={fileInputRef} type="file" accept=".db" className="hidden" onChange={importFile} />
+              {/* iOS maps `accept` onto document types, and .db has no
+                  registered one — constraining it there greys out the very
+                  file the user came to pick. */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={isOnDevice ? undefined : '.db'}
+                className="hidden"
+                onChange={importFile}
+              />
               <button className="btn-secondary text-xs" onClick={pickFile} disabled={importing}>
                 {importing ? 'Restoring…' : 'Import a backup file'}
               </button>
             </>
+          )}
+          {isOnDevice && (
+            <button className="btn-secondary text-xs" onClick={exportDb} disabled={exporting}>
+              {exporting ? 'Exporting…' : 'Export a copy'}
+            </button>
           )}
           <button className="btn-secondary text-xs" onClick={runNow} disabled={running}>
             {running ? 'Backing up…' : 'Back up now'}
@@ -285,10 +326,19 @@ function BackupPanel({ toast, confirm, isAdmin }) {
         )}
       </div>
 
-      <p className="text-xs text-slate-400 dark:text-slate-500">
-        The last 30 days of backups are kept automatically.
-        Stored in <code className="bg-slate-100 dark:bg-slate-700 px-1 py-0.5 rounded">data/backups/</code>.
-      </p>
+      {isOnDevice ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          The last 10 backups are kept in this app's private storage, which means they
+          go with the app if it's deleted. <strong>Export a copy</strong> puts a file in
+          the Files app instead, and a file exported from the desktop app can be brought
+          back in with <strong>Import a backup file</strong>.
+        </p>
+      ) : (
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          The last 30 days of backups are kept automatically.
+          Stored in <code className="bg-slate-100 dark:bg-slate-700 px-1 py-0.5 rounded">data/backups/</code>.
+        </p>
+      )}
     </div>
   );
 }

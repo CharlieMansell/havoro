@@ -206,6 +206,9 @@ Capacitor 8 uses Swift Package Manager, so there is no CocoaPods step and no
 - Database persisted to a real file via Capacitor Filesystem, so it survives
   restarts and is covered by device backup
 - Writes coalesced and flushed when the app is backgrounded
+- Importing a database file from a desktop or self-hosted install, and
+  exporting one back out to the Files app — see below
+- On-device restore points, the last 10 kept
 
 **Not done yet:**
 
@@ -216,8 +219,6 @@ Capacitor 8 uses Swift Package Manager, so there is no CocoaPods step and no
   not been tested on a device.
 - **Share prices** call out to the network from the client rather than a
   server; App Transport Security may need configuring.
-- **Backups** write to the app's private directory with no way to get a file
-  out. Exporting to the Files app or iCloud is unbuilt.
 - **No release build has ever been produced.** Nothing here has been compiled
   by Xcode — it is scaffolding, and the first `Run` on a Mac is where real
   problems will surface.
@@ -229,8 +230,63 @@ Capacitor 8 uses Swift Package Manager, so there is no CocoaPods step and no
 ## Data on the device
 
 The database is a single SQLite file in the app's data directory. It is not
-shared with the desktop or server builds — an iPhone running this is a separate
-household ledger unless you move a file across by hand, which there is
-currently no UI for.
+*shared* with the desktop or server builds — nothing syncs, and an iPhone
+running this is a separate household ledger. It can be **moved**, though, in
+either direction: the file format is identical across every build, so a
+database is a database whether it came off a laptop, a Docker volume or a
+phone.
 
-Deleting the app deletes the database.
+Deleting the app deletes the database. Take a copy out first if it matters.
+
+### Moving a database between the desktop app and the phone
+
+Both directions go through **Settings → Database backups**.
+
+**Desktop → phone**
+
+1. On the desktop app, **Back up now**. Use this rather than copying
+   `havoro.db` yourself: the running app keeps recent writes in a
+   write-ahead log beside the database, and a hand-copied file can be missing
+   them. The backup is a checkpointed, self-contained copy.
+2. Take the newest `havoro-YYYY-MM-DD-HHMMSS.db` from the backup folder:
+
+   | Build | Folder |
+   |---|---|
+   | Desktop app (Windows) | `%APPDATA%\Havoro\backups\` |
+   | Desktop app (Linux) | `~/.config/Havoro/backups/` |
+   | Docker / self-hosted | `data/backups/` in the mounted volume |
+
+3. Get it onto the phone however you like — iCloud Drive, AirDrop, email to
+   yourself. It needs to be somewhere the Files app can see it.
+4. On the phone, **Import a backup file**, pick it, confirm. The app takes a
+   restore point of what's already there first, then reloads into the imported
+   database.
+
+**Phone → desktop**
+
+1. On the phone, **Export a copy**. This writes the database to the app's
+   Documents folder, which appears in **Files → On My iPhone → Havoro**.
+2. Move it off the phone from there, then use **Import a backup file** on the
+   desktop app.
+
+The importer refuses anything that isn't a Havoro database — it checks the
+SQLite header, runs an integrity check, and looks for the tables it expects,
+so a CSV or a half-copied file is rejected rather than replacing your data
+with rubble. A database from an older release is migrated up to the current
+schema on the way in, the same way the server migrates its own on startup
+(`client/src/local/migrate.js`, mirroring `server/db/db.js`).
+
+Going *backwards* — a database from a newer release into an older build — is
+not handled and not checked for. Update the app first.
+
+### Restore points on the device
+
+**Back up now** on the phone keeps a copy in the app's private storage, and
+the last 10 are retained. These are a safety net for a bad import or a
+mistaken bulk delete, not a backup strategy: they live inside the app, so
+deleting it takes them too, and the only copy that survives a lost phone is
+one you exported and moved off.
+
+There is no scheduled backup on iOS. A schedule needs something running at the
+appointed time and an app that isn't open isn't running — the desktop build
+has the same problem and works around it by backing up once per launch.

@@ -32,6 +32,16 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Exposes the app's Documents directory in the Files app, under
+	     On My iPhone → Havoro. Settings → Export a copy writes the database
+	     there; without these two keys it still writes, but to a directory no
+	     user can ever reach, which is worse than not writing at all.
+	     UIFileSharingEnabled covers the Files app and Finder; the second key
+	     lets the file be opened in place rather than copied first. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
