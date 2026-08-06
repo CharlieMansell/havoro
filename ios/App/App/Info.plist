@@ -6,6 +6,14 @@
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<!-- Declares that the app uses no encryption beyond what iOS itself
+	     provides for HTTPS, which is exempt. Without this key App Store
+	     Connect asks the export-compliance question by hand on every single
+	     upload, and the build sits unavailable to testers until answered.
+	     Havoro makes HTTPS calls only (GitHub for updates, share prices) and
+	     ships no cryptography of its own. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleDisplayName</key>
         <string>Havoro</string>
 	<key>CFBundleExecutable</key>
