@@ -63,6 +63,7 @@ The desktop app is the primary, supported way to run Havoro. A Docker image is a
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design with diagrams — how it's all put together |
 | [docs/SERVER-SETUP.md](docs/SERVER-SETUP.md) | Pi / NAS / VPS install, Docker, auto-deploy via GitHub Actions |
 | [docs/WINDOWS.md](docs/WINDOWS.md) | Windows Docker Desktop and Electron build guide |
+| [docs/IOS.md](docs/IOS.md) | iOS build — Capacitor wrapper running the app with no server |
 | [docs/TECHNICAL.md](docs/TECHNICAL.md) | Database schema, API reference |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security model, hardening, data privacy |
 | [docs/CODE-SIGNING.md](docs/CODE-SIGNING.md) | Code signing policy — how releases are built, signed, and verified |

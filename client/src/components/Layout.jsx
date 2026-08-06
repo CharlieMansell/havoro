@@ -182,7 +182,7 @@ export default function Layout({ children }) {
 
   return (
     <div className="h-dvh flex bg-slate-50 dark:bg-slate-900">
-      <aside className="hidden md:flex md:flex-col w-56 shrink-0 bg-white dark:bg-slate-800 border-r border-slate-100 dark:border-slate-700 fixed inset-y-0 left-0 z-30">
+      <aside className="hidden md:flex md:flex-col w-56 shrink-0 bg-white dark:bg-slate-800 border-r border-slate-100 dark:border-slate-700 fixed inset-y-0 left-0 z-30 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
         {sidebar}
       </aside>
 
@@ -190,12 +190,17 @@ export default function Layout({ children }) {
         <div className="md:hidden fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={() => setOpen(false)} />
       )}
 
-      <aside className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 shadow-xl transform transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 shadow-xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transform transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         {sidebar}
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col md:pl-56">
-        <header className="md:hidden sticky top-0 z-20 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 px-4 py-3 flex items-center gap-3">
+        {/* pt keeps the usual 0.75rem of padding and adds however much of
+            the screen iOS has reserved for the status bar and notch —
+            without it the title renders underneath the clock. Zero
+            everywhere that has no inset, so the browser is unaffected.
+            The left/right insets matter in landscape on a notched phone. */}
+        <header className="md:hidden sticky top-0 z-20 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))] pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] flex items-center gap-3">
           <button onClick={() => setOpen(true)} className="text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 p-1 -m-1" aria-label="Open menu">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -208,7 +213,7 @@ export default function Layout({ children }) {
         </header>
 
         <main className="flex-1 overflow-x-hidden overflow-y-auto">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))]">
             {children}
           </div>
           <div style={{ height: 'env(safe-area-inset-bottom)' }} />

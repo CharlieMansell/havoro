@@ -1,0 +1,125 @@
+# NOT YET RUN. Written from Apple's and GitHub's documented behaviour rather
+# than from a green build — iOS signing usually needs a round or two of
+# adjustment on first contact. See docs/IOS.md for the secrets it expects.
+
+name: iOS TestFlight
+
+# Manual only. An iOS build takes a macOS runner and pushes a build to real
+# testers, neither of which should happen on every commit to main.
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: What changed in this build (shown to testers)
+        required: false
+        default: ''
+
+jobs:
+  testflight:
+    name: Build and upload to TestFlight
+    # Free with no minute cap on public repositories. On a private repo this
+    # burns minutes at 10x the Linux rate, so it would want rationing.
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix client
+
+      # Builds the client with the on-device backend and copies it into the
+      # native project. Without this the app ships whatever web assets were
+      # last committed, which is nothing.
+      - name: Build web assets and sync Capacitor
+        run: npm run build:ios
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      # xcodebuild and altool both look for keys in this directory by ID, so
+      # writing it here means neither needs a path argument.
+      - name: Write App Store Connect API key
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "$KEY_P8" > ~/private_keys/AuthKey_${KEY_ID}.p8
+          chmod 600 ~/private_keys/AuthKey_${KEY_ID}.p8
+
+      # TestFlight rejects a build number it has seen before, and the run
+      # number is the one counter that always goes up. The marketing version
+      # tracks package.json so a build is traceable to a release.
+      - name: Set version and build number
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Marketing version $VERSION, build ${{ github.run_number }}"
+
+      - name: Archive
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Havoro.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${KEY_ID}.p8 \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGN_STYLE=Automatic
+
+      - name: Export .ipa
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Havoro.xcarchive" \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${KEY_ID}.p8 \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID"
+
+      - name: Upload to TestFlight
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          IPA=$(find "$RUNNER_TEMP/export" -name '*.ipa' | head -1)
+          echo "Uploading $IPA"
+          # altool reads the key from ~/private_keys by ID. If Apple retires
+          # it, `fastlane pilot upload` is the drop-in replacement and is
+          # preinstalled on the runner.
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA" \
+            --apiKey "$KEY_ID" \
+            --apiIssuer "$ISSUER_ID"
+
+      # Keeping the .ipa means a failed upload doesn't cost a whole rebuild,
+      # and gives you something to inspect when signing goes wrong.
+      - name: Keep the build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: havoro-ios-${{ steps.version.outputs.version }}-${{ github.run_number }}
+          path: ${{ runner.temp }}/export/*.ipa
+          if-no-files-found: ignore

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- TestFlight and the App Store are the same destination as far as
+       export is concerned; which testers see a build is decided in App
+       Store Connect afterwards, not here. -->
+  <key>method</key>
+  <string>app-store-connect</string>
+
+  <!-- Signing assets are created and downloaded by xcodebuild itself, using
+       the App Store Connect API key passed on the command line. That's what
+       avoids having to export a .p12 certificate out of a Mac you don't
+       have and store it as a secret. -->
+  <key>signingStyle</key>
+  <string>automatic</string>
+
+  <key>destination</key>
+  <string>export</string>
+
+  <!-- Symbols go up so App Store Connect can symbolicate crash reports. -->
+  <key>uploadSymbols</key>
+  <true/>
+
+  <!-- Bitcode has been dead since Xcode 14; leaving it on is a build error. -->
+  <key>compileBitcode</key>
+  <false/>
+</dict>
+</plist>

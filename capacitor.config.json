@@ -1,0 +1,12 @@
+{
+  "appId": "com.havoro.app",
+  "appName": "Havoro",
+  "webDir": "client/dist",
+  "ios": {
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": true
+  },
+  "server": {
+    "iosScheme": "havoro"
+  }
+}

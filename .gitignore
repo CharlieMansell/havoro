@@ -7,3 +7,6 @@ data/
 dist/
 client/dist/
 .DS_Store
+
+# iOS build artifacts are covered by ios/.gitignore, which Capacitor ships
+# and regenerates — anything added here would just duplicate it.
