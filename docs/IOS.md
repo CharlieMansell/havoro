@@ -61,6 +61,50 @@ npm run ios:open       # opens ios/App in Xcode  (macOS only)
 copies `client/dist` into the native project, so an un-synced change simply
 will not appear in the app.
 
+### Without a Mac at all
+
+You don't need to own one — you need a macOS *runner*, and GitHub gives those
+away free on public repositories (the 10x minute multiplier only applies to
+private repos). `.github/workflows/ios-testflight.yml` builds on `macos-latest`
+and uploads straight to TestFlight, so the phone in your pocket is the only
+Apple hardware involved.
+
+**The one unavoidable cost is Apple's Developer Program, US$99/year.**
+TestFlight cannot be reached with a free Apple ID, and no CI arrangement gets
+around that.
+
+Set-up, once:
+
+1. Join the [Apple Developer Program](https://developer.apple.com/programs/)
+2. In App Store Connect, create an app record with bundle id `com.havoro.app`
+3. **Users and Access → Integrations → App Store Connect API**, create a key
+   with the **App Manager** role, and download the `.p8`. You only get to
+   download it once.
+4. Add three repository secrets under **Settings → Secrets and variables →
+   Actions**:
+
+   | Secret | Where it comes from |
+   |---|---|
+   | `APPSTORE_KEY_ID` | Shown next to the key you created |
+   | `APPSTORE_ISSUER_ID` | At the top of the same API keys page |
+   | `APPSTORE_PRIVATE_KEY` | The whole `.p8` file contents, `BEGIN`/`END` lines included |
+   | `APPLE_TEAM_ID` | Apple Developer → Membership details |
+
+5. **Actions → iOS TestFlight → Run workflow**
+
+The build number comes from the workflow run number, which only ever goes up —
+TestFlight rejects a build number it has already seen. The marketing version
+comes from `package.json`, so a TestFlight build traces back to a release.
+
+Signing assets are created by `xcodebuild` itself using the API key, which is
+why there's no certificate `.p12` to export from a Mac you don't have.
+
+Expect the first run to fail on something. iOS signing nearly always needs a
+round or two, and this workflow has never been executed — it's written from
+Apple's and GitHub's documented behaviour, not from a green build. The `.ipa`
+is kept as an artifact even on failure so a broken upload doesn't cost a whole
+rebuild.
+
 ### On macOS, the first time
 
 1. Xcode 15 or newer, from the App Store
