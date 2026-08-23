@@ -14,7 +14,7 @@ import initSqlJs from 'sql.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { SCHEMA_SQL } from './schema.js';
 import { migrate } from './migrate.js';
-import { BANK_PROFILES, parseBankCSV, importHash } from './csvImport.js';
+import { BANK_PROFILES, parseBankFile, importHash } from './csvImport.js';
 import {
   loadDatabase, saveDatabase, schedulePersist, flushPending,
   isNative, listBackups, writeBackup, readBackup, exportDatabase,
@@ -284,11 +284,13 @@ async function handleUpload(path, form) {
   if (!profileId) return { error: 'profile required', status: 400 };
   const profile = BANK_PROFILES[profileId];
   if (!profile) return { error: 'Profile not found', status: 404 };
-  const text = await file.text();
+  // Bytes, not text — an Excel download is a zip, and decoding it as UTF-8
+  // first would corrupt it beyond recovery.
+  const bytes = new Uint8Array(await file.arrayBuffer());
 
   if (path === '/import/preview') {
     try {
-      const rows = parseBankCSV(text, profile);
+      const rows = await parseBankFile(bytes, profile);
       return { ok: true, rowCount: rows.length, sample: rows.slice(0, 5) };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -298,7 +300,7 @@ async function handleUpload(path, form) {
   if (path !== '/import') return { error: `Unknown upload endpoint ${path}`, status: 404 };
   const accountId = Number(form.get('account_id'));
   if (!accountId) return { error: 'profile and account_id required', status: 400 };
-  const parsed = parseBankCSV(text, profile);
+  const parsed = await parseBankFile(bytes, profile);
 
   // Transfer detection: opposite amount in another account within ±3 days
   const otherAccounts = all('SELECT id FROM accounts WHERE archived = 0 AND id != ?', [accountId]);
@@ -670,7 +672,8 @@ function handle(method, path, query, body) {
 
   if (path === '/holdings') return [];
   if (path === '/import/profiles')
-    return Object.entries(BANK_PROFILES).map(([id, p]) => ({ id, name: p.name, account_match: p.account_match }));
+    return Object.entries(BANK_PROFILES).map(([id, p]) =>
+      ({ id, name: p.name, account_match: p.account_match, file: p.file || 'csv' }));
   if (path === '/users' && method === 'GET') return [LOCAL_USER];
 
   return { error: `Not available in the on-device proof-of-concept yet (${method} ${path})`, status: 501 };

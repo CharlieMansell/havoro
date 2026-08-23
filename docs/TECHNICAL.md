@@ -493,21 +493,58 @@ Columns are referenced by **zero-based position**, not by header name — banks 
 | `amount` | Signed amount column. Set `negate: true` if the bank writes debits as positive. |
 | `debit_credit` | Use instead of `amount` when the bank splits money in and out across two columns: `{ "debit_column": 1, "credit_column": 3 }`. |
 
-**The four bundled profiles**, each verified against a real export:
+**The five bundled profiles:**
 
-| Bank | Header row | Columns | Notes |
-|---|---|---|---|
-| ANZ | none (`skip_rows: 0`) | Date, Amount, Description, From, To, —, —, Reference | Signed amount. The trailing reference column is the payer's own note ("Spotify"), mapped to `merchant`. |
-| CommBank | none (`skip_rows: 0`) | Date, Amount, Description, Balance | Signed amount. No merchant or category column. |
-| NAB | yes | Date, Amount, Account Number, Transaction Type, Transaction Details, Balance, Category, Merchant Name, Processed On | Dates are `31 Jul 26`. Description is Transaction Details, not the account number in column 2. |
-| Westpac | yes | Bank Account, Date, Narrative, Debit Amount, Credit Amount, Balance, Categories, Serial | Leading account-number column shifts everything right by one. Separate debit/credit columns. |
+| Bank | Format | Header row | Columns | Notes |
+|---|---|---|---|---|
+| ANZ | CSV | none (`skip_rows: 0`) | Date, Amount, Description, From, To, —, —, Reference | Signed amount. The trailing reference column is the payer's own note ("Spotify"), mapped to `merchant`. |
+| CommBank | CSV | none (`skip_rows: 0`) | Date, Amount, Description, Balance | Signed amount. No merchant or category column. |
+| NAB | CSV | yes | Date, Amount, Account Number, Transaction Type, Transaction Details, Balance, Category, Merchant Name, Processed On | Dates are `31 Jul 26`. Description is Transaction Details, not the account number in column 2. |
+| Westpac | CSV | yes | Bank Account, Date, Narrative, Debit Amount, Credit Amount, Balance, Categories, Serial | Leading account-number column shifts everything right by one. Separate debit/credit columns. |
+| Amex | **xlsx** | row 7, after five lines of letterhead | Date, Date Processed, Description, Card Member, Account #, Amount, Foreign Spend Amount, Commission, Exchange Rate, Additional Information, Appears On Your Statement As, Address, Town/City, Postcode, Country, Reference | **Amounts are the other way up** — a purchase is positive, a payment negative — so the profile sets `negate: true`. Dates are real Excel date cells. |
 
-Always confirm against a real export before trusting a profile — every one of these four was wrong at some point in a way that silently mangled imports rather than failing loudly.
+The first four were each verified against a real populated export. **Amex has been verified
+against a real export's structure but not its contents** — the export it was built from had
+the header row and no transactions under it — so its date handling and sign convention are
+reasoned from the header names and the summary sheet rather than observed. Confirm the
+preview before trusting an Amex import.
+
+Always confirm against a real export before trusting a profile — every one of these was
+wrong at some point in a way that silently mangled imports rather than failing loudly.
+
+### Excel exports
+
+`file: "xlsx"` switches a profile from `csv-parse` to `services/xlsxReader.js`, which reads
+the first worksheet into the same array-of-rows shape. Everything downstream — column
+indexes, `skip_rows`, date formats, `negate`, `merchant`, `bank_category` — is unchanged.
+
+The reader is hand-written and dependency-free: an `.xlsx` is a zip of XML, Node has the
+inflate half in `zlib` and browsers have `DecompressionStream('deflate-raw')`, so the
+on-device build gets the same capability without shipping a spreadsheet library. It does
+not handle styles, merged cells, formulas (the cached value is used) or zip64.
+
+Two details that bite:
+
+- **The first sheet is not reliably `sheet1.xml`.** File names follow creation order,
+  the workbook lists display order. Amex ships Transaction Details followed by Transaction
+  Summary, and reading the wrong one gives you a file with no transactions in it.
+- **A date cell holds a number** — days since 1899-12-30 — not text. Format `EXCEL`
+  converts a serial in a plausible range and falls back to string parsing otherwise, since
+  the same bank may write either.
+
+`header_match` locates the header row by content instead of counting rows past it, which
+is what makes the Amex profile survive Amex adding a line to its letterhead. `skip_rows`
+remains the fallback.
+
+A profile and a file are checked against each other: a zip container handed to a CSV
+profile, or a CSV handed to an xlsx profile, is refused with a message saying which
+download to take, rather than reporting zero rows found.
 
 To add a new bank:
-1. Export a sample CSV from your bank
-2. Create a new JSON file in `server/bank-profiles/` — the filename (minus `.json`) becomes the profile id
-3. Restart the server; profiles are picked up by reading the directory, so there's no list to register it in
+1. Export a sample file from your bank
+2. Create a new JSON file in `server/bank-profiles/` — the filename (minus `.json`) becomes the profile id. Set `"file": "xlsx"` if the bank's usable export is a spreadsheet
+3. Mirror it into `client/src/local/csvImport.js` so the iOS build has it too
+4. Restart the server; profiles are picked up by reading the directory, so there's no list to register it in
 
 ---
 

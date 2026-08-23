@@ -29,7 +29,14 @@ router.get('/profiles', (req, res) => {
   const profiles = files.map(f => {
     try {
       const data = JSON.parse(fs.readFileSync(path.join(PROFILES_DIR, f), 'utf8'));
-      return { id: f.replace('.json', ''), name: data.name, account_match: data.account_match };
+      // `file` tells the client which extension to accept — most banks export
+      // CSV, Amex's usable export is a spreadsheet.
+      return {
+        id: f.replace('.json', ''),
+        name: data.name,
+        account_match: data.account_match,
+        file: data.file || 'csv',
+      };
     } catch { return null; }
   }).filter(Boolean);
   res.json(profiles);

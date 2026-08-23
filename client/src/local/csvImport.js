@@ -1,8 +1,22 @@
-// CSV import for the on-device backend — ported from
+// CSV and Excel import for the on-device backend — ported from
 // server/services/csvImporter.js and server/bank-profiles/*.json.
 // Keep in sync when the server importer or profiles change.
 
+import { readXLSX, looksLikeXLSX, excelDate } from './xlsxReader.js';
+
 export const BANK_PROFILES = {
+  amex: {
+    name: 'American Express — Card', account_match: 'amex',
+    // The only profile on an Excel download rather than a CSV: Amex's
+    // spreadsheet is the export that carries the merchant and category
+    // columns worth categorising on.
+    file: 'xlsx', skip_rows: 7, header_match: ['Date', 'Description', 'Amount'],
+    date: { column: 0, format: 'EXCEL' }, description: { column: 2 },
+    merchant: { column: 10 }, bank_category: { column: 9 },
+    // Amex states a purchase as a positive number and a payment as a
+    // negative one, which is the opposite of every other profile here.
+    amount: { column: 5, negate: true },
+  },
   anz: {
     name: 'ANZ — Everyday / Savings', account_match: 'anz', skip_rows: 0,
     date: { column: 0, format: 'D/M/YYYY' }, description: { column: 2 },
@@ -82,8 +96,15 @@ function parseNamedMonthDate(str) {
 }
 
 function parseDate(value, format) {
-  const str = String(value).trim();
+  let str = String(value).trim();
   if (!str) return null;
+
+  // An Excel date cell holds a serial number, not text — see the server copy.
+  if (format === 'EXCEL') {
+    str = String(excelDate(str)).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  }
+
   let d, m, y;
   if (format === 'DD MMM YY' || format === 'DD MMM YYYY') {
     const parts = parseNamedMonthDate(str);
@@ -114,11 +135,50 @@ function cleanDescription(raw) {
     .trim();
 }
 
-export function parseBankCSV(text, profile) {
+// The first row containing all of `match` (in any column), or -1.
+function findHeaderRow(records, match) {
+  const needles = (Array.isArray(match) ? match : [match]).map(s => s.toLowerCase());
+  for (let i = 0; i < records.length; i++) {
+    const cells = records[i].map(c => String(c ?? '').trim().toLowerCase());
+    if (needles.every(n => cells.includes(n))) return i;
+  }
+  return -1;
+}
+
+// Both formats reduce to rows of cell strings; everything downstream is shared.
+async function toRecords(bytes, profile) {
+  const skip = profile.skip_rows ?? 1;
+  const isXLSX = looksLikeXLSX(bytes);
+
+  if (profile.file === 'xlsx') {
+    if (!isXLSX) {
+      throw new Error(`${profile.name} expects the Excel (.xlsx) download — that file isn't one. `
+        + 'Re-download it choosing Excel rather than CSV.');
+    }
+    const all = await readXLSX(bytes);
+    // Locate the header rather than counting past the letterhead where the
+    // profile says how to recognise it; skip_rows is the fallback.
+    if (profile.header_match) {
+      const index = findHeaderRow(all, profile.header_match);
+      if (index >= 0) return all.slice(index + 1);
+    }
+    return all.slice(skip);
+  }
+
+  if (isXLSX) {
+    throw new Error(`${profile.name} expects a .csv file, but that's a spreadsheet. `
+      + 'Re-download it choosing CSV.');
+  }
+
   // BOM strip + skip header rows (record-based; bank CSV fields don't contain newlines).
   // ?? not || — a headerless export sets skip_rows: 0, and `0 || 1` would
   // quietly drop its first transaction.
-  const records = parseCsvText(text.replace(/^﻿/, '')).slice(profile.skip_rows ?? 1);
+  const text = new TextDecoder('utf-8').decode(bytes).replace(/^﻿/, '');
+  return parseCsvText(text).slice(skip);
+}
+
+export async function parseBankFile(bytes, profile) {
+  const records = await toRecords(bytes, profile);
 
   const rows = [];
   for (const rec of records) {

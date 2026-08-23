@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const db = require('../db/db');
 const { categorise } = require('./categoriser');
 const { defaultBudgetMonth, shiftDays } = require('./budgetMonth');
+const { readXLSX, looksLikeXLSX, excelDate } = require('./xlsxReader');
 
 function parseAmount(value) {
   if (!value && value !== 0) return null;
@@ -39,8 +40,18 @@ function parseNamedMonthDate(str) {
 }
 
 function parseDate(value, format) {
-  const str = String(value).trim();
+  let str = String(value).trim();
   if (!str) return null;
+
+  // An Excel date cell holds a number, not text. Amex writes real date cells
+  // in its .xlsx download — but only sometimes, and a CSV of the same data is
+  // plain text, so this converts a serial when it sees one and otherwise
+  // leaves the string to the format handling below.
+  if (format === 'EXCEL') {
+    str = String(excelDate(str)).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  }
+
   // supported formats: DD/MM/YYYY, YYYY-MM-DD, MM/DD/YYYY, D/M/YYYY, DD MMM YY
   let d, m, y;
   if (format === 'DD MMM YY' || format === 'DD MMM YYYY') {
@@ -95,16 +106,66 @@ function cleanDescription(raw) {
     .trim();
 }
 
-function parseCSV(buffer, profile) {
-  const records = parse(buffer, {
+// The first row containing all of `match` (in any column), or -1.
+function findHeaderRow(records, match) {
+  const needles = (Array.isArray(match) ? match : [match]).map(s => s.toLowerCase());
+  for (let i = 0; i < records.length; i++) {
+    const cells = records[i].map(c => String(c ?? '').trim().toLowerCase());
+    if (needles.every(n => cells.includes(n))) return i;
+  }
+  return -1;
+}
+
+// Both file formats reduce to the same thing — an array of rows of cell
+// strings — so everything below this point is shared. A profile declares which
+// format its bank exports, and the file itself is checked against that: a
+// buffer either is a zip container or it isn't, and getting it wrong is worth
+// saying plainly rather than reporting zero rows found.
+function toRecords(buffer, profile) {
+  const skip = profile.skip_rows ?? 1;
+  const isXLSX = looksLikeXLSX(buffer);
+
+  if (profile.file === 'xlsx') {
+    if (!isXLSX) {
+      throw new Error(
+        `${profile.name} expects the Excel (.xlsx) download — that file isn't one. ` +
+        'Re-download it choosing Excel rather than CSV.');
+    }
+    const all = readXLSX(buffer);
+
+    // Amex puts five lines of letterhead and a blank line above the header
+    // row. Counting them works until the day Amex adds a line, so where a
+    // profile says which cells identify its header row, find it rather than
+    // trusting the count — skip_rows stays as the fallback.
+    if (profile.header_match) {
+      const index = findHeaderRow(all, profile.header_match);
+      if (index >= 0) return all.slice(index + 1);
+    }
+
+    // Blank rows inside the preamble are real rows in the sheet, so the skip
+    // count lines up with what you see in Excel.
+    return all.slice(skip);
+  }
+
+  if (isXLSX) {
+    throw new Error(
+      `${profile.name} expects a .csv file, but that's a spreadsheet. ` +
+      'Re-download it choosing CSV.');
+  }
+
+  return parse(buffer, {
     skip_empty_lines: true,
     // ?? not || — ANZ and CommBank export with no header row at all, and
     // `0 || 1` would quietly skip their first transaction on every import.
-    from_line: (profile.skip_rows ?? 1) + 1,
+    from_line: skip + 1,
     relax_column_count: true,
     bom: true,
     trim: true,
   });
+}
+
+function parseCSV(buffer, profile) {
+  const records = toRecords(buffer, profile);
 
   const rows = [];
   for (const rec of records) {

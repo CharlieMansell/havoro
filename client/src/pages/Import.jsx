@@ -26,6 +26,13 @@ export default function Import() {
     ['transaction','savings','offset','credit_card'].includes(a.type)
   );
 
+  // Most banks export CSV; Amex's usable export is a spreadsheet. Until a
+  // profile is chosen, accept either rather than blocking the file they have.
+  const selected = profiles.find(p => p.id === profile);
+  const wantsXLSX = selected?.file === 'xlsx';
+  const acceptExts = !selected ? ['.csv', '.xlsx'] : wantsXLSX ? ['.xlsx'] : ['.csv'];
+  const fileLabel = !selected ? 'CSV or Excel file' : wantsXLSX ? 'Excel file' : 'CSV file';
+
   const previewFile = async (f, p) => {
     if (!f || !p) return;
     setError('');
@@ -57,7 +64,9 @@ export default function Import() {
     e.preventDefault();
     setDragging(false);
     const f = e.dataTransfer.files[0];
-    if (f && f.name.endsWith('.csv')) handleFileChange(f);
+    if (!f) return;
+    if (acceptExts.some(ext => f.name.toLowerCase().endsWith(ext))) handleFileChange(f);
+    else setError(`That needs to be ${acceptExts.join(' or ')} — got ${f.name}`);
   };
 
   const doImport = async () => {
@@ -119,7 +128,7 @@ export default function Import() {
 
           {/* File drop */}
           <div>
-            <label className="label">CSV file</label>
+            <label className="label">{fileLabel}</label>
             <div
               className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
                 dragging ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500'
@@ -136,15 +145,21 @@ export default function Import() {
                 </div>
               ) : (
                 <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Drop your CSV here, or click to select</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Exported from your bank's internet banking</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Drop your {wantsXLSX ? 'spreadsheet' : 'CSV'} here, or click to select
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    {wantsXLSX
+                      ? 'From Statements & Activity — choose the Excel download, not CSV'
+                      : "Exported from your bank's internet banking"}
+                  </p>
                 </div>
               )}
             </div>
             <input
               ref={fileRef}
               type="file"
-              accept=".csv"
+              accept={acceptExts.join(',')}
               className="hidden"
               onChange={e => handleFileChange(e.target.files[0])}
             />

@@ -31,7 +31,7 @@ Havoro only accepts bank-exported CSVs — it never connects directly to your ba
 
 1. Export a CSV from your bank's internet banking (usually under Transactions → Export/Download)
 2. Go to **Import** in the sidebar
-3. Select your bank profile (ANZ, NAB, Westpac, CommBank included)
+3. Select your bank profile (ANZ, NAB, Westpac, CommBank and Amex included)
 4. Preview the parsed rows, then confirm
 
 Transactions are deduplicated on import using a hash of account + date + description + amount, so re-importing an overlapping export is safe — only genuinely new rows are added. Two separate purchases that happen to match on all four (two coffees at the same shop on the same day) are both kept.
@@ -52,7 +52,7 @@ Transactions come in uncategorised. Havoro auto-categorises using **rules** (Set
 
 - **Description** — the raw statement line. Always available.
 - **Merchant** — a tidied merchant name or payment reference, where the bank provides one (NAB's Merchant Name, ANZ's payment reference).
-- **Bank category** — the bank's own categorisation, where it provides one (NAB, Westpac). One rule maps a whole bank category to a Havoro one.
+- **Bank category** — the bank's own categorisation, where it provides one (NAB, Westpac, and Amex's "Additional Information"). One rule maps a whole bank category to a Havoro one.
 
 A rule with no field data on a transaction simply doesn't apply, so field-specific rules for one bank can't mis-fire on another's rows.
 
