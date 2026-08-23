@@ -523,6 +523,12 @@ inflate half in `zlib` and browsers have `DecompressionStream('deflate-raw')`, s
 on-device build gets the same capability without shipping a spreadsheet library. It does
 not handle styles, merged cells, formulas (the cached value is used) or zip64.
 
+**One platform limit worth knowing:** `DecompressionStream` is WebKit 16.4+, and the iOS
+deployment target is 15.0. Excel imports therefore do not work on iOS 15.0–16.3 — CSV
+profiles are unaffected, and the reader says so by name rather than throwing a
+`ReferenceError`. Closing that gap means either raising the deployment target to 16.4 or
+carrying a raw DEFLATE decoder for older WebKit; neither is done.
+
 Two details that bite:
 
 - **The first sheet is not reliably `sheet1.xml`.** File names follow creation order,

@@ -217,6 +217,10 @@ Capacitor 8 uses Swift Package Manager, so there is no CocoaPods step and no
 - **CSV import** relies on a file picker that has not been wired to iOS. The
   browser `<input type="file">` works in a WKWebView for the Files app, but has
   not been tested on a device.
+- **Excel (.xlsx) import — Amex's format — needs iOS 16.4 or newer.** The reader
+  inflates the zip with `DecompressionStream`, which older WebKit lacks. The
+  deployment target is 15.0, so on a 15.0–16.3 device the import refuses with a
+  message naming the reason; CSV profiles work on any version.
 - **Share prices** call out to the network from the client rather than a
   server; App Transport Security may need configuring.
 - **No release build has ever been produced.** Nothing here has been compiled
