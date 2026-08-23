@@ -12,7 +12,17 @@ const EOCD_SIG = 0x06054b50;
 const CEN_SIG = 0x02014b50;
 const LOCAL_SIG = 0x04034b50;
 
+// DecompressionStream landed in WebKit 16.4, and this project's iOS
+// deployment target is 15.0 — so on an older phone this is simply absent.
+// Everything else in the app works there, including every CSV profile, which
+// is exactly why the failure needs to name itself: a bare ReferenceError here
+// reads as "Amex import is broken" rather than "this phone is too old".
 async function inflateRaw(bytes) {
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error(
+      'Reading Excel files needs iOS 16.4 or newer. CSV imports work on any version — '
+      + 'for Amex, update iOS or import on the desktop app instead.');
+  }
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
