@@ -219,7 +219,7 @@ sequenceDiagram
 
     U->>C: Upload bank CSV (file picker)
     C->>I: POST multipart (file + account)
-    I->>I: Detect bank profile<br/>(ANZ/NAB/Westpac/CommBank column maps)
+    I->>I: Detect bank profile<br/>(ANZ/NAB/Westpac/CommBank/Amex column maps)
     I->>I: Parse rows → normalise dates/amounts to cents
     I->>I: Hash each row (import_hash)
     I->>DB: INSERT OR IGNORE (dupes skipped by unique hash)

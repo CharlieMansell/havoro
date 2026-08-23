@@ -13,11 +13,21 @@
 import initSqlJs from 'sql.js';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { SCHEMA_SQL } from './schema.js';
-import { BANK_PROFILES, parseBankCSV, importHash } from './csvImport.js';
-import { loadDatabase, schedulePersist, flushPending } from './storage.js';
+import { migrate } from './migrate.js';
+import { BANK_PROFILES, parseBankFile, importHash } from './csvImport.js';
+import {
+  loadDatabase, saveDatabase, schedulePersist, flushPending,
+  isNative, listBackups, writeBackup, readBackup, exportDatabase,
+} from './storage.js';
 
 const LOCAL_USER = { id: 1, name: 'You', email: 'on-this-device', is_admin: 1 };
 
+// Injected by vite.config.js from the root package.json, so a build on a phone
+// reports the same version as the release it came from. The fallback only
+// applies if something builds this without the define.
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0-dev';
+
+let SQL = null;
 let db = null;
 
 // ── sqlite helpers ──────────────────────────────────────────────────────────
@@ -262,16 +272,25 @@ function categorise(transaction) {
 
 async function handleUpload(path, form) {
   const file = form.get('file');
-  const profileId = form.get('profile');
   if (!file) return { error: 'file required', status: 400 };
+
+  // Restoring a database file the user picked — a whole SQLite image, not a
+  // CSV, so it never reaches the bank-profile parsing below.
+  if (path === '/settings/restore-upload') {
+    return restoreFromBytes(new Uint8Array(await file.arrayBuffer()));
+  }
+
+  const profileId = form.get('profile');
   if (!profileId) return { error: 'profile required', status: 400 };
   const profile = BANK_PROFILES[profileId];
   if (!profile) return { error: 'Profile not found', status: 404 };
-  const text = await file.text();
+  // Bytes, not text — an Excel download is a zip, and decoding it as UTF-8
+  // first would corrupt it beyond recovery.
+  const bytes = new Uint8Array(await file.arrayBuffer());
 
   if (path === '/import/preview') {
     try {
-      const rows = parseBankCSV(text, profile);
+      const rows = await parseBankFile(bytes, profile);
       return { ok: true, rowCount: rows.length, sample: rows.slice(0, 5) };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -281,7 +300,7 @@ async function handleUpload(path, form) {
   if (path !== '/import') return { error: `Unknown upload endpoint ${path}`, status: 404 };
   const accountId = Number(form.get('account_id'));
   if (!accountId) return { error: 'profile and account_id required', status: 400 };
-  const parsed = parseBankCSV(text, profile);
+  const parsed = await parseBankFile(bytes, profile);
 
   // Transfer detection: opposite amount in another account within ±3 days
   const otherAccounts = all('SELECT id FROM accounts WHERE archived = 0 AND id != ?', [accountId]);
@@ -315,6 +334,130 @@ async function handleUpload(path, form) {
   }
   persist();
   return { ...results, total: parsed.length };
+}
+
+// ── taking a database file in ───────────────────────────────────────────────
+// Every SQLite file starts with this, NUL included — 16 bytes exactly.
+const SQLITE_MAGIC = 'SQLite format 3\0';
+
+// Not the whole schema, just enough to tell a Havoro database from some other
+// application's SQLite file before it replaces the user's data. Anything the
+// file is missing beyond this, migrate() adds.
+const REQUIRED_TABLES = ['accounts', 'transactions', 'categories', 'budgets', 'settings'];
+
+// Validates a candidate database and returns it open, or an error to send back.
+// Nothing here touches the live database — the caller swaps only on success.
+function openDatabaseFile(input) {
+  let bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+
+  if (bytes.length < 100 || String.fromCharCode(...bytes.subarray(0, 16)) !== SQLITE_MAGIC) {
+    return { error: "That doesn't look like a Havoro backup file (.db)", status: 400 };
+  }
+
+  // Bytes 18 and 19 are the file-format read and write versions: 2 means the
+  // database was last used in WAL mode, which is how both the server and the
+  // desktop app run, so every file a user brings over has this set.
+  //
+  // sql.js turns out to read one anyway — there is no -wal sidecar in its
+  // in-memory VFS, so it sees an empty log and carries on. That is a property
+  // of how this particular build was compiled rather than something SQLite
+  // guarantees, and a build with SQLITE_OMIT_WAL refuses the file outright
+  // with a bare "unable to open database file". Normalising the header costs
+  // two bytes on a copy we already own and removes the variable: a
+  // checkpointed WAL database is byte-for-byte an ordinary rollback-journal
+  // one apart from these.
+  //
+  // A file whose WAL had *not* been checkpointed is missing pages either way,
+  // and fails the integrity check below rather than loading half a ledger —
+  // which is why the docs say to export from the desktop app rather than
+  // copying havoro.db out from underneath a running one.
+  if (bytes[18] === 2 && bytes[19] === 2) {
+    bytes = bytes.slice();
+    bytes[18] = 1;
+    bytes[19] = 1;
+  }
+
+  let candidate;
+  try {
+    candidate = new SQL.Database(bytes);
+  } catch (e) {
+    return { error: `That file could not be opened as a database (${e.message})`, status: 400 };
+  }
+
+  try {
+    const check = candidate.exec('PRAGMA quick_check')[0]?.values?.[0]?.[0];
+    if (check !== 'ok') throw new Error('the file is damaged or incomplete');
+
+    const names = new Set(
+      (candidate.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []).map(r => r[0]));
+    const missing = REQUIRED_TABLES.filter(t => !names.has(t));
+    if (missing.length) throw new Error(`it has no ${missing.join(' or ')} table`);
+
+    // The file may come from an older release than this build, so bring it up
+    // to the schema the queries below expect before it goes anywhere near live.
+    migrate(candidate);
+  } catch (e) {
+    try { candidate.close(); } catch { /* already gone */ }
+    return { error: `That doesn't look like a Havoro database — ${e.message}`, status: 400 };
+  }
+
+  return { db: candidate };
+}
+
+// Swaps the live database for another one. The client reloads afterwards,
+// which is what the server build does by restarting the process — every
+// component is holding data from the old database and none of it is right.
+async function restoreFromBytes(bytes) {
+  const opened = openDatabaseFile(bytes);
+  if (opened.error) return opened;
+
+  // A restore is the one operation with nothing to undo it, so take a restore
+  // point of what's about to be replaced. Best-effort: failing to snapshot
+  // shouldn't block a user trying to recover from a database they can't use.
+  if (isNative()) {
+    try { await writeBackup(db.export()); } catch (e) { console.warn('[local] pre-restore backup failed:', e); }
+  }
+
+  // Any coalesced write still pending belongs to the old database. Landing it
+  // after the swap would overwrite what was just restored.
+  await flushPending();
+  try { db.close(); } catch { /* already closed */ }
+
+  db = opened.db;
+  await saveDatabase(db.export()); // awaited, not scheduled — the reload is imminent
+  return { ok: true, restarting: true };
+}
+
+// ── async routes ────────────────────────────────────────────────────────────
+// Anything that touches the filesystem, which handle() below can't do because
+// its callers are synchronous. Returns undefined when it doesn't own the route.
+async function handleAsync(method, path) {
+  if (path === '/settings/backups' && method === 'GET') return listBackups();
+
+  if (path === '/settings/backup' && method === 'POST') {
+    if (!isNative()) return { error: 'Backups need the app — the browser build has nowhere to put them', status: 501 };
+    await flushPending();
+    const filename = await writeBackup(db.export());
+    return { ok: true, path: filename };
+  }
+
+  if (path === '/settings/export' && method === 'POST') {
+    await flushPending();
+    return exportDatabase(db.export());
+  }
+
+  const restore = /^\/settings\/restore\/(.+)$/.exec(path);
+  if (restore && method === 'POST') {
+    let bytes;
+    try {
+      bytes = await readBackup(decodeURIComponent(restore[1]));
+    } catch (e) {
+      return { error: `Backup not found (${e.message})`, status: 404 };
+    }
+    return restoreFromBytes(bytes);
+  }
+
+  return undefined;
 }
 
 // ── router ──────────────────────────────────────────────────────────────────
@@ -521,13 +664,16 @@ function handle(method, path, query, body) {
     for (const [k, v] of Object.entries(body)) run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, String(v)]);
     return { ok: true };
   }
-  if (path === '/settings/version') return { version: '1.1.0-ios-poc' };
-  if (path === '/settings/backups') return [];
-  if (path === '/settings/backup-schedule') return { cron: '0 2 * * *' };
+  if (path === '/settings/version') return { version: APP_VERSION };
+  // No scheduler on-device — the app isn't running at 2am to fire one. The
+  // Settings page hides the control in this build; this is here so a stale
+  // client asking for it gets an answer rather than a 501.
+  if (path === '/settings/backup-schedule') return { cron: null };
 
   if (path === '/holdings') return [];
   if (path === '/import/profiles')
-    return Object.entries(BANK_PROFILES).map(([id, p]) => ({ id, name: p.name, account_match: p.account_match }));
+    return Object.entries(BANK_PROFILES).map(([id, p]) =>
+      ({ id, name: p.name, account_match: p.account_match, file: p.file || 'csv' }));
   if (path === '/users' && method === 'GET') return [LOCAL_USER];
 
   return { error: `Not available in the on-device proof-of-concept yet (${method} ${path})`, status: 501 };
@@ -535,10 +681,14 @@ function handle(method, path, query, body) {
 
 // ── fetch interception ──────────────────────────────────────────────────────
 export async function installLocalBackend() {
-  const SQL = await initSqlJs({ locateFile: () => wasmUrl });
+  SQL = await initSqlJs({ locateFile: () => wasmUrl });
   const saved = await loadDatabase();
   db = saved ? new SQL.Database(saved) : null;
-  if (!db) {
+  if (db) {
+    // An install that has been sitting on a phone since an earlier build still
+    // has that build's schema. Bring it forward before the first query.
+    migrate(db);
+  } else {
     db = new SQL.Database();
     db.run(SCHEMA_SQL);
     seed();
@@ -564,6 +714,9 @@ export async function installLocalBackend() {
 
     try {
       if (init.body instanceof FormData) return toResponse(await handleUpload(path, init.body));
+
+      const fromAsync = await handleAsync(method, path);
+      if (fromAsync !== undefined) return toResponse(fromAsync);
 
       let body = {};
       if (init.body && typeof init.body === 'string') {

@@ -210,8 +210,9 @@
 
   <!-- ─────────────────────────────────────────────── -->
   <h2 id="importing">4. Importing &amp; categorising like it's no effort</h2>
-  <h3>Getting the CSV</h3>
+  <h3>Getting the file</h3>
   <p>Log in to your bank's website (not the app; the export option usually lives on the desktop site), find the transaction export, and pick CSV format. ANZ, NAB, Westpac, and CommBank exports are recognised automatically. Export a whole month or more at once; overlapping date ranges are safe, because Havoro detects and skips duplicates on import. Check the preview before confirming: dates should read as dates, descriptions as descriptions, and money coming in should be positive. That is the quickest way to spot a bank quietly changing its export format.</p>
+  <p><strong>American Express is the exception</strong>: choose the <strong>Excel</strong> download rather than CSV. Under <em>Statements &amp; Activity</em>, pick the period, then Download. The spreadsheet is the version that carries the merchant name and the category text, which is what makes Amex transactions categorise themselves; the CSV does not. Havoro will tell you if you hand it the wrong one. Check the preview shows transactions — an Amex download that covers a statement period rather than actual activity can come out with column headings and nothing underneath.</p>
 
   <h3>Categorising fast</h3>
   <ul>

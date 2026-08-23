@@ -15,7 +15,18 @@ import { Capacitor } from '@capacitor/core';
 const STORAGE_KEY = 'hl_local_db_v1';
 const FILE_NAME = 'havoro.db';
 
-const isNative = () => Capacitor.isNativePlatform();
+// Restore points, kept beside the live database in the app's private data
+// directory. Named the same way the server names its own backups so a file
+// taken off a desktop install and a file taken on the phone are
+// interchangeable — see server/services/backup.js.
+const BACKUP_DIR = 'backups';
+const BACKUP_NAME_RE = /^havoro-\d{4}-\d{2}-\d{2}-\d{6}\.db$/;
+
+// The server keeps 30 days' worth. A phone has less room to spare and these
+// are full copies of the database, so keep a fixed small number instead.
+const KEEP_BACKUPS = 10;
+
+export const isNative = () => Capacitor.isNativePlatform();
 
 // Imported lazily so the browser build never pulls the plugin in.
 async function filesystem() {
@@ -94,6 +105,85 @@ export function schedulePersist(bytes) {
 export function flushPending() {
   if (timer) clearTimeout(timer);
   return flush();
+}
+
+// ── restore points ──────────────────────────────────────────────────────────
+// Native only. In a browser the database already lives in localStorage under a
+// 5MB cap, and storing whole extra copies of it there is the quickest way to
+// hit that ceiling; the browser build reports no backups rather than pretending.
+
+export function backupName(now = new Date()) {
+  // Matches the server's format exactly, including the time of day — two
+  // backups on the same day must not collide.
+  return `havoro-${now.toISOString().slice(0, 19).replace('T', '-').replace(/:/g, '')}.db`;
+}
+
+export async function listBackups() {
+  if (!isNative()) return [];
+  const { Filesystem, Directory } = await filesystem();
+  try {
+    const { files } = await Filesystem.readdir({ path: BACKUP_DIR, directory: Directory.Data });
+    return files
+      .filter(f => BACKUP_NAME_RE.test(f.name))
+      .map(f => ({ filename: f.name, size: f.size, mtime: f.mtime }))
+      .sort((a, b) => b.filename.localeCompare(a.filename));
+  } catch {
+    return []; // directory doesn't exist yet — no backups have been taken
+  }
+}
+
+export async function writeBackup(bytes, name = backupName()) {
+  if (!isNative()) throw new Error('Backups need the app, not the browser build');
+  const { Filesystem, Directory } = await filesystem();
+  await Filesystem.writeFile({
+    path: `${BACKUP_DIR}/${name}`,
+    directory: Directory.Data,
+    data: bytesToBase64(bytes),
+    recursive: true, // creates backups/ on the first run
+  });
+  await pruneBackups();
+  return name;
+}
+
+export async function readBackup(name) {
+  if (!BACKUP_NAME_RE.test(name)) throw new Error('Not a backup file name');
+  const { Filesystem, Directory } = await filesystem();
+  const { data } = await Filesystem.readFile({ path: `${BACKUP_DIR}/${name}`, directory: Directory.Data });
+  return base64ToBytes(data);
+}
+
+async function pruneBackups() {
+  const existing = await listBackups(); // newest first
+  const { Filesystem, Directory } = await filesystem();
+  for (const b of existing.slice(KEEP_BACKUPS)) {
+    try {
+      await Filesystem.deleteFile({ path: `${BACKUP_DIR}/${b.filename}`, directory: Directory.Data });
+    } catch { /* another write may have removed it already */ }
+  }
+}
+
+// ── getting a copy off the device ───────────────────────────────────────────
+// Documents is the one directory iOS will show to the user, and only because
+// UIFileSharingEnabled is set in Info.plist. Without that key this writes
+// somewhere real but invisible, which is worse than not writing at all.
+export async function exportDatabase(bytes, name = backupName()) {
+  if (isNative()) {
+    const { Filesystem, Directory } = await filesystem();
+    const { uri } = await Filesystem.writeFile({
+      path: name, directory: Directory.Documents, data: bytesToBase64(bytes), recursive: true,
+    });
+    return { filename: name, uri, where: 'files-app' };
+  }
+
+  // Browser build: an ordinary download.
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  // Revoking immediately can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return { filename: name, uri: null, where: 'download' };
 }
 
 if (typeof document !== 'undefined') {

@@ -1,0 +1,13 @@
+{
+  "name": "American Express — Card",
+  "account_match": "amex",
+  "file": "xlsx",
+  "encoding": "utf-8",
+  "skip_rows": 7,
+  "header_match": ["Date", "Description", "Amount"],
+  "date": { "column": 0, "format": "EXCEL" },
+  "description": { "column": 2 },
+  "merchant": { "column": 10 },
+  "bank_category": { "column": 9 },
+  "amount": { "column": 5, "negate": true }
+}

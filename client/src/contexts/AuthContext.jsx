@@ -8,6 +8,11 @@ const AuthContext = createContext(null);
 // apart from the browser/PWA/self-hosted cases.
 const isElectron = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
 
+// The iOS build answers its own /api/* calls from a database on the device
+// (see local/localBackend.js). Some things a server does — scheduled backups,
+// other users — have nowhere to happen in that build.
+const isOnDevice = import.meta.env.VITE_LOCAL_BACKEND === '1';
+
 const THEME_KEY = 'havoro-theme';
 const prefersDarkMedia = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
@@ -140,7 +145,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, needsSetup, isElectron, theme, resolvedTheme, setTheme, login, completeLocalSetup, completeSetup, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, needsSetup, isElectron, isOnDevice, theme, resolvedTheme, setTheme, login, completeLocalSetup, completeSetup, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
