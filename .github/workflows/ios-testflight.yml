@@ -85,8 +85,50 @@ jobs:
           KEY_P8: ${{ secrets.APPSTORE_PRIVATE_KEY }}
         run: |
           mkdir -p ~/private_keys
-          echo "$KEY_P8" > ~/private_keys/AuthKey_${KEY_ID}.p8
-          chmod 600 ~/private_keys/AuthKey_${KEY_ID}.p8
+          KEY_FILE=~/private_keys/AuthKey_${KEY_ID}.p8
+
+          # A .p8 is a PEM, and a PEM is defined by its line structure as much
+          # as its content. Two things routinely destroy that between Apple's
+          # download and this file:
+          #
+          #   - CRLF line endings, if the key was opened in a Windows editor
+          #     on the way to the secret box.
+          #   - The whole key flattened onto one line, if it was copied out of
+          #     something that folded it.
+          #
+          # Both still contain "BEGIN PRIVATE KEY", so they look right to a
+          # grep, and both fail to parse. xcodebuild reports that as
+          # `CryptoKitASN1Error.invalidPEMDocument` — accurate, and no help at
+          # all in working out that the problem is whitespace. So: strip the
+          # carriage returns, and rebuild the line breaks if they're missing.
+          printf '%s\n' "$KEY_P8" | tr -d '\r' > "$KEY_FILE.tmp"
+
+          if [ "$(grep -c . "$KEY_FILE.tmp")" -le 2 ]; then
+            echo "Key arrived without line breaks — rebuilding the PEM."
+            BODY=$(tr -d '\n' < "$KEY_FILE.tmp" \
+              | sed -e 's/.*-----BEGIN PRIVATE KEY-----//' \
+                    -e 's/-----END PRIVATE KEY-----.*//' \
+              | tr -d ' \t')
+            {
+              echo '-----BEGIN PRIVATE KEY-----'
+              echo "$BODY" | fold -w 64
+              echo '-----END PRIVATE KEY-----'
+            } > "$KEY_FILE"
+          else
+            mv "$KEY_FILE.tmp" "$KEY_FILE"
+          fi
+          rm -f "$KEY_FILE.tmp"
+          chmod 600 "$KEY_FILE"
+
+          # Confirm it actually parses. This is the check the grep in the
+          # preflight can't do, and it costs a second here instead of eight
+          # minutes of archiving before xcodebuild says the same thing less
+          # clearly. Nothing about the key is printed either way.
+          if ! openssl pkey -in "$KEY_FILE" -noout 2>/dev/null; then
+            echo "::error::APPSTORE_PRIVATE_KEY does not parse as a private key. Re-copy the .p8 from Apple's download — open it in a plain-text editor, select all, and paste the whole thing including the BEGIN and END lines."
+            exit 1
+          fi
+          echo "API key parsed OK."
 
       # TestFlight rejects a build number it has seen before, and the run
       # number is the one counter that always goes up. The marketing version
