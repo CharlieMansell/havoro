@@ -147,14 +147,35 @@ comes from `package.json`, so a TestFlight build traces back to a release.
 Signing assets are created by `xcodebuild` itself using the API key, which is
 why there's no certificate `.p12` to export from a Mac you don't have.
 
-The archive passes `CODE_SIGN_IDENTITY="Apple Distribution"` explicitly. Without
-it, Xcode inherits Capacitor's template default of `iPhone Developer` in the
-Release configuration and asks Apple for a *development* profile — which is tied
-to registered devices, so a team with no devices registered fails with
-"Your team has no devices from which to generate a provisioning profile",
-which reads like an account problem rather than a build-setting one. An App
-Store distribution profile needs no devices at all. The project file is left as
-Capacitor ships it; the override lives in the workflow, where it is visible.
+**You must register at least one device before the first archive**, even though
+nothing is ever installed on it directly and TestFlight itself does not need it.
+
+This is unintuitive enough to be worth spelling out. With automatic signing,
+`xcodebuild archive` signs with a **development** identity; distribution signing
+happens afterwards, when `-exportArchive` re-signs the app using the
+`app-store-connect` method in `ios/ExportOptions.plist`. Apple will not issue a
+development profile to a team with no registered devices, so a brand-new account
+fails the archive with:
+
+```
+Communication with Apple failed: Your team has no devices from which to
+generate a provisioning profile.
+No profiles for 'com.havoro.app' were found: Xcode couldn't find any
+iOS App Development provisioning profiles matching 'com.havoro.app'.
+```
+
+Forcing `CODE_SIGN_IDENTITY="Apple Distribution"` to get around it does not work
+— automatic signing owns the identity and rejects one being specified by hand:
+*"App is automatically signed for development, but a conflicting code signing
+identity Apple Distribution has been manually specified."* Register a device
+instead.
+
+**Registering a device from Windows:** install Apple Devices (or iTunes) from
+the Microsoft Store, connect the iPhone by cable and trust the computer, select
+the device, then click the serial number — it cycles through to the UDID, which
+can be right-clicked and copied. Then Developer portal → **Certificates,
+Identifiers & Profiles → Devices → +**, platform iOS, any name, and paste the
+UDID.
 
 Expect the first run to fail on something. iOS signing nearly always needs a
 round or two, and this workflow has never been executed — it's written from
