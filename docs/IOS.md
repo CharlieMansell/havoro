@@ -147,6 +147,15 @@ comes from `package.json`, so a TestFlight build traces back to a release.
 Signing assets are created by `xcodebuild` itself using the API key, which is
 why there's no certificate `.p12` to export from a Mac you don't have.
 
+The archive passes `CODE_SIGN_IDENTITY="Apple Distribution"` explicitly. Without
+it, Xcode inherits Capacitor's template default of `iPhone Developer` in the
+Release configuration and asks Apple for a *development* profile — which is tied
+to registered devices, so a team with no devices registered fails with
+"Your team has no devices from which to generate a provisioning profile",
+which reads like an account problem rather than a build-setting one. An App
+Store distribution profile needs no devices at all. The project file is left as
+Capacitor ships it; the override lives in the workflow, where it is visible.
+
 Expect the first run to fail on something. iOS signing nearly always needs a
 round or two, and this workflow has never been executed — it's written from
 Apple's and GitHub's documented behaviour, not from a green build. The `.ipa`
