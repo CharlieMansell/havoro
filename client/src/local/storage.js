@@ -4,8 +4,28 @@
 // fine for a proof-of-concept and hopeless on a real device: localStorage caps
 // out around 5MB and base64 adds a third on top, so a couple of years of
 // transactions would silently fail to save. On iOS the same bytes go to a file
-// in the app's data directory instead, which has no such ceiling and is
-// covered by the device backup.
+// on disk instead, which has no such ceiling and is covered by device backup.
+//
+// ── Which directory, and why it matters ────────────────────────────────────
+//
+// Capacitor's Directory.Data and Directory.Documents are the *same place* on
+// iOS — both fall through to the Documents directory (see getDirectory() in
+// the plugin's LegacyFilesystemImplementation.swift). Documents is the one
+// directory UIFileSharingEnabled exposes in the Files app, so anything kept
+// there is visible to the user and deletable by hand.
+//
+// That is right for a copy someone asked to export, and wrong for the live
+// database and its automatic restore points: losing the ledger to a stray
+// swipe in Files is not a recovery story. Apple's data-storage guidance says
+// much the same about re-creatable files — ten rotating copies of a database
+// have no business inflating someone's iCloud backup.
+//
+// So: Library for the working files, Documents only for deliberate exports.
+// Library is still covered by device backup; it simply isn't browsable.
+//
+// Not Caches, despite sounding like the obvious home for backups: iOS purges
+// Caches under storage pressure without asking, and a backup that can vanish
+// silently is worse than none, because you would believe you had one.
 //
 // Both paths store the same thing — the raw sql.js export — so a database
 // written by one can be read by the other.
@@ -51,11 +71,55 @@ function base64ToBytes(b64) {
   return bytes;
 }
 
+// Earlier builds kept the database and its backups in Documents. Anyone who
+// installed one has files sitting where the Files app can see — and delete —
+// them, so move rather than abandon: read from the old location once, write to
+// the new one, then remove the original so it stops being deletable.
+//
+// Best-effort throughout. A migration that throws would make the app look
+// empty on launch, which is far worse than a stale copy left in Documents.
+async function migrateFromDocuments() {
+  const { Filesystem, Directory } = await filesystem();
+
+  const move = async (path) => {
+    const { data } = await Filesystem.readFile({ path, directory: Directory.Documents });
+    await Filesystem.writeFile({ path, directory: Directory.Library, data, recursive: true });
+    await Filesystem.deleteFile({ path, directory: Directory.Documents });
+  };
+
+  try {
+    await move(FILE_NAME);
+    console.log('[local] migrated database out of Documents');
+  } catch {
+    // Nothing there, which is the normal case on a fresh or already-migrated
+    // install.
+  }
+
+  try {
+    const { files } = await Filesystem.readdir({ path: BACKUP_DIR, directory: Directory.Documents });
+    for (const f of files.filter(f => BACKUP_NAME_RE.test(f.name))) {
+      try { await move(`${BACKUP_DIR}/${f.name}`); } catch { /* skip this one */ }
+    }
+    try { await Filesystem.rmdir({ path: BACKUP_DIR, directory: Directory.Documents }); } catch { /* not empty, fine */ }
+  } catch {
+    // No old backups directory.
+  }
+}
+
 export async function loadDatabase() {
   try {
     if (isNative()) {
       const { Filesystem, Directory } = await filesystem();
-      const { data } = await Filesystem.readFile({ path: FILE_NAME, directory: Directory.Data });
+      try {
+        const { data } = await Filesystem.readFile({ path: FILE_NAME, directory: Directory.Library });
+        return base64ToBytes(data);
+      } catch {
+        // Not in the new location — an install from before the move, or a
+        // first run. Migrating is cheap and does nothing when there's nothing
+        // to move.
+        await migrateFromDocuments();
+      }
+      const { data } = await Filesystem.readFile({ path: FILE_NAME, directory: Directory.Library });
       return base64ToBytes(data);
     }
     const b64 = localStorage.getItem(STORAGE_KEY);
@@ -71,7 +135,7 @@ export async function saveDatabase(bytes) {
   const b64 = bytesToBase64(bytes);
   if (isNative()) {
     const { Filesystem, Directory } = await filesystem();
-    await Filesystem.writeFile({ path: FILE_NAME, directory: Directory.Data, data: b64 });
+    await Filesystem.writeFile({ path: FILE_NAME, directory: Directory.Library, data: b64 });
     return;
   }
   localStorage.setItem(STORAGE_KEY, b64);
@@ -122,7 +186,7 @@ export async function listBackups() {
   if (!isNative()) return [];
   const { Filesystem, Directory } = await filesystem();
   try {
-    const { files } = await Filesystem.readdir({ path: BACKUP_DIR, directory: Directory.Data });
+    const { files } = await Filesystem.readdir({ path: BACKUP_DIR, directory: Directory.Library });
     return files
       .filter(f => BACKUP_NAME_RE.test(f.name))
       .map(f => ({ filename: f.name, size: f.size, mtime: f.mtime }))
@@ -132,12 +196,46 @@ export async function listBackups() {
   }
 }
 
+// A restore point per day, taken when the app opens.
+//
+// The desktop build does the same thing for the same reason: a clock-based
+// schedule only fires if the app happens to be running at that moment, which
+// for something you open a few times a month it rarely is. Launch is the one
+// moment we know we're running.
+//
+// Once per day, not once per launch — otherwise opening the app five times in
+// an afternoon rotates the entire history out and leaves five copies of today.
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export async function backupIfDue(bytes) {
+  if (!isNative()) return null;
+
+  const existing = await listBackups(); // newest first
+  if (existing.length) {
+    // Parse the timestamp out of havoro-YYYY-MM-DD-HHMMSS.db rather than
+    // trusting mtime, which a restore or a file copy can move.
+    const m = /^havoro-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})\.db$/.exec(existing[0].filename);
+    if (m) {
+      const [, y, mo, d, h, mi, s] = m;
+      const last = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s);
+      if (Date.now() - last < DAY_MS) return null;
+    }
+  }
+
+  try {
+    return await writeBackup(bytes);
+  } catch (e) {
+    console.warn('[local] launch backup failed:', e);
+    return null;
+  }
+}
+
 export async function writeBackup(bytes, name = backupName()) {
   if (!isNative()) throw new Error('Backups need the app, not the browser build');
   const { Filesystem, Directory } = await filesystem();
   await Filesystem.writeFile({
     path: `${BACKUP_DIR}/${name}`,
-    directory: Directory.Data,
+    directory: Directory.Library,
     data: bytesToBase64(bytes),
     recursive: true, // creates backups/ on the first run
   });
@@ -148,7 +246,7 @@ export async function writeBackup(bytes, name = backupName()) {
 export async function readBackup(name) {
   if (!BACKUP_NAME_RE.test(name)) throw new Error('Not a backup file name');
   const { Filesystem, Directory } = await filesystem();
-  const { data } = await Filesystem.readFile({ path: `${BACKUP_DIR}/${name}`, directory: Directory.Data });
+  const { data } = await Filesystem.readFile({ path: `${BACKUP_DIR}/${name}`, directory: Directory.Library });
   return base64ToBytes(data);
 }
 
@@ -157,7 +255,7 @@ async function pruneBackups() {
   const { Filesystem, Directory } = await filesystem();
   for (const b of existing.slice(KEEP_BACKUPS)) {
     try {
-      await Filesystem.deleteFile({ path: `${BACKUP_DIR}/${b.filename}`, directory: Directory.Data });
+      await Filesystem.deleteFile({ path: `${BACKUP_DIR}/${b.filename}`, directory: Directory.Library });
     } catch { /* another write may have removed it already */ }
   }
 }

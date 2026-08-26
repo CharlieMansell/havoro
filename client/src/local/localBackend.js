@@ -17,7 +17,7 @@ import { migrate } from './migrate.js';
 import { BANK_PROFILES, parseBankFile, importHash } from './csvImport.js';
 import {
   loadDatabase, saveDatabase, schedulePersist, flushPending,
-  isNative, listBackups, writeBackup, readBackup, exportDatabase,
+  isNative, listBackups, writeBackup, readBackup, exportDatabase, backupIfDue,
 } from './storage.js';
 
 const LOCAL_USER = { id: 1, name: 'You', email: 'on-this-device', is_admin: 1 };
@@ -728,6 +728,17 @@ export async function installLocalBackend() {
       return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
   };
+
+  // A daily restore point, taken on launch. Deliberately not awaited: it
+  // copies the whole database, and nothing about starting the app should wait
+  // on it. Deferred past first paint so it never competes with rendering.
+  if (isNative()) {
+    setTimeout(() => {
+      backupIfDue(db.export())
+        .then(name => name && console.log(`[local] launch backup ${name}`))
+        .catch(e => console.warn('[local] launch backup failed:', e));
+    }, 4000);
+  }
 
   console.log('[local] on-device backend installed — no server, data stays in this browser/device');
 }

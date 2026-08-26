@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Onboarding, { hasSeenOnboarding } from './components/Onboarding';
+import { onIncomingFile, hasIncomingFile } from './local/incomingFile';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
@@ -25,6 +26,15 @@ export default function App() {
   // On-device only, and only once. Read at mount rather than on every render
   // so dismissing it doesn't depend on localStorage having been written yet.
   const [showOnboarding, setShowOnboarding] = useState(() => isOnDevice && !hasSeenOnboarding());
+  const navigate = useNavigate();
+
+  // Sharing a statement into Havoro should land on the importer no matter what
+  // was on screen — otherwise the file is silently parked and nothing happens.
+  useEffect(() => {
+    if (!isOnDevice) return;
+    if (hasIncomingFile()) navigate('/import');
+    return onIncomingFile(() => navigate('/import'));
+  }, [isOnDevice, navigate]);
 
   if (user === undefined || needsSetup === undefined) {
     return (

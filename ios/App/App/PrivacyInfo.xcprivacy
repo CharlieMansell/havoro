@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Required for every app since May 2024. Without it, App Store Connect
+       rejects the upload or emails a warning that becomes a rejection.
+
+       Capacitor's own frameworks ship their own manifests, but the plugins
+       are compiled into this target via Swift Package Manager rather than
+       shipped as separate bundles, so their API use has to be declared here. -->
+
+  <!-- Havoro does not track anyone. There is no analytics, no advertising
+       identifier, and no third-party SDK that could carry one. -->
+  <key>NSPrivacyTracking</key>
+  <false/>
+
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+
+  <!-- Nothing leaves the device, so nothing is collected in Apple's sense of
+       the word. This must match the App Privacy answers in App Store Connect,
+       where the honest answer is "Data Not Collected". -->
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array/>
+
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array>
+    <!-- Reading and writing the database and its backups through the
+         Filesystem plugin touches file creation and modification dates —
+         the backup list shows them. C617.1 is the reason code for doing so
+         entirely inside the app's own container, which is where every file
+         Havoro touches lives. -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>C617.1</string>
+      </array>
+    </dict>
+
+    <!-- Capacitor stores its own configuration in UserDefaults. CA92.1 covers
+         reading back values written by this same app, which is all that
+         happens here. -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>CA92.1</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

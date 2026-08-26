@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCents, formatDate } from '../lib/utils';
+import { takeIncomingFile, onIncomingFile } from '../local/incomingFile';
 
 // Getting a file from a bank's website into an app is obvious on a desktop and
 // genuinely not on a phone: iOS hands you a download rather than opening it,
@@ -32,22 +33,22 @@ function PhoneFileHelp() {
       {open && (
         <div className="px-4 pb-4 text-sm text-slate-600 dark:text-slate-300 space-y-3 leading-relaxed">
           <div>
-            <p className="font-medium text-slate-700 dark:text-slate-200">From Safari</p>
+            <p className="font-medium text-slate-700 dark:text-slate-200">Share it straight in</p>
             <p className="text-slate-500 dark:text-slate-400">
-              Log in to your bank and export a statement. When the download finishes, tap the
-              downloads icon in the address bar, then the file, then <em>Save to Files</em>.
+              Export a statement from your bank in Safari, tap the download, then
+              <strong> Share → Havoro</strong>. It opens here with the file already loaded.
+              The same works from Files, Mail or iCloud Drive.
             </p>
           </div>
           <div>
-            <p className="font-medium text-slate-700 dark:text-slate-200">By email</p>
+            <p className="font-medium text-slate-700 dark:text-slate-200">Or by hand</p>
             <p className="text-slate-500 dark:text-slate-400">
-              Export it on a computer and send it to yourself. Long-press the attachment on your
-              phone and choose <em>Save to Files</em>.
+              Choose <em>Save to Files</em> instead, then tap the box below to pick it.
             </p>
           </div>
           <p className="text-slate-500 dark:text-slate-400">
-            Then tap the box below to pick it from Files. Export a whole month or more at once —
-            overlapping dates are safe, because duplicates are detected and skipped.
+            Export a whole month or more at once — overlapping dates are safe, because
+            duplicates are detected and skipped.
           </p>
         </div>
       )}
@@ -113,6 +114,17 @@ export default function Import() {
     setResult(null);
     if (file && p) previewFile(file, p);
   };
+
+  // A file shared into the app lands here: either already waiting when this
+  // page opens (cold start), or arriving while it's on screen.
+  useEffect(() => {
+    if (!isOnDevice) return;
+    const waiting = takeIncomingFile();
+    if (waiting) handleFileChange(waiting);
+    return onIncomingFile(handleFileChange);
+    // handleFileChange closes over `profile`, which is exactly what we want:
+    // a file arriving after a bank is picked previews immediately.
+  }, [isOnDevice, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDrop = (e) => {
     e.preventDefault();

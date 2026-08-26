@@ -91,24 +91,18 @@ const STEPS = [
     body: (
       <>
         <p>
-          This is the fiddly bit on iOS, because banks hand you a file rather than
-          opening it. Either way works:
+          Log in to your bank in Safari and export a statement. When the download
+          finishes, tap it, then <strong>Share → Havoro</strong>. The app opens on the
+          import screen with the file already loaded.
         </p>
-        <ul className="list-disc pl-5 space-y-1.5">
-          <li>
-            <strong>In Safari</strong> — log in to your bank, export the statement, and when
-            the download finishes tap it in the Downloads list and choose
-            <em> Save to Files</em>.
-          </li>
-          <li>
-            <strong>By email</strong> — send the export to yourself from a computer, then long-press
-            the attachment and choose <em>Save to Files</em>.
-          </li>
-        </ul>
         <p>
-          Then in Havoro: <strong>Import</strong>, pick your bank, choose the account, and tap the
-          file box to select it from Files. Check the preview before confirming — dates
-          should read as dates and money coming in should be positive.
+          That works from anywhere iOS can share a file — the Files app, a mail
+          attachment, iCloud Drive. If you'd rather do it by hand, <em>Save to Files</em>
+          first and pick it from the Import screen instead.
+        </p>
+        <p>
+          Either way, choose your bank and the account, then check the preview before
+          confirming — dates should read as dates and money coming in should be positive.
         </p>
         <p className="text-slate-400 dark:text-slate-500">
           Most banks export CSV. American Express is the exception: choose its

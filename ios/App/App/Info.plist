@@ -32,6 +32,52 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Puts Havoro in the "Open in…" list when you share or tap a bank
+	     statement, so a download in Safari can go straight to the importer
+	     instead of via Save to Files and a second trip through the app.
+	     The types are the ones the bank profiles actually read: CSV for
+	     everyone, and Excel for American Express, whose CSV export drops the
+	     merchant and category columns. Editor rather than Viewer because the
+	     app consumes the file rather than displaying it. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Bank statement (CSV)</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.comma-separated-values-text</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Bank statement (Excel)</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.openxmlformats.spreadsheetml.sheet</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Havoro database</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.database</string>
+			</array>
+		</dict>
+	</array>
 	<!-- Exposes the app's Documents directory in the Files app, under
 	     On My iPhone → Havoro. Settings → Export a copy writes the database
 	     there; without these two keys it still writes, but to a directory no

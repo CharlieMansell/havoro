@@ -48,6 +48,12 @@ async function bootstrap() {
   if (import.meta.env.VITE_LOCAL_BACKEND === '1') {
     const { installLocalBackend } = await import('./local/localBackend.js');
     await installLocalBackend();
+
+    // Statements shared into the app from Safari or Files. Not awaited — a
+    // failure here must not stop the app from starting.
+    import('./local/incomingFile.js')
+      .then(m => m.installFileHandler())
+      .catch(e => console.warn('[local] file handler unavailable:', e));
   }
 
   ReactDOM.createRoot(document.getElementById('root')).render(

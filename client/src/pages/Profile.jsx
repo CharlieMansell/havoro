@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
 export default function Profile() {
-  const { user, logout, refreshUser, isElectron } = useAuth();
+  const { user, logout, refreshUser, isElectron, isOnDevice } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -62,8 +62,8 @@ export default function Profile() {
         </div>
         <div className="min-w-0">
           <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{user?.name}</p>
-          {!isElectron && <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{user?.email}</p>}
-          {!isElectron && user?.is_admin && (
+          {!isElectron && !isOnDevice && <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{user?.email}</p>}
+          {!isElectron && !isOnDevice && user?.is_admin && (
             <span className="mt-1 inline-block text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded font-medium">Admin</span>
           )}
         </div>
@@ -90,8 +90,10 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Change password — not applicable on desktop, there's no password to change */}
-      {!isElectron && (
+      {/* No password to change on desktop, and none on-device either: the
+          on-device backend has no auth at all and answers the change-password
+          route with a 501, so this form could only ever fail. */}
+      {!isElectron && !isOnDevice && (
         <div className="card space-y-4">
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Change password</h2>
           <div>
@@ -134,8 +136,9 @@ export default function Profile() {
         </div>
       )}
 
-      {/* Sign out — not applicable on desktop, there's no login screen to return to */}
-      {!isElectron && (
+      {/* Sign out — not applicable on desktop, there's no login screen to
+          return to, and the same is true on-device: nothing ever signed in. */}
+      {!isElectron && !isOnDevice && (
         <div className="card">
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Session</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
