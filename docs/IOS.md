@@ -96,7 +96,15 @@ store listing, not on the phone, so pick anything free.
 
 **4. Create an API key** — App Store Connect → **Users and Access →
 Integrations → App Store Connect API → Team Keys → +**. Give it the
-**App Manager** role and generate it.
+**Admin** role and generate it.
+
+Admin, not App Manager. The export step uses Apple's cloud signing to create
+the distribution certificate, and only Admin may create certificates. An App
+Manager key gets far enough to archive and then fails the export with
+`Cloud signing permission error` / `No signing certificate "iOS Distribution"
+found` — which names the certificate, not the permission, and sends you looking
+for a missing certificate rather than a key that is not allowed to make one.
+A key's role cannot be changed after it is created; generate a new one.
 
 Download the `.p8` immediately — **Apple lets you download it exactly once**.
 Note the **Key ID** shown beside it and the **Issuer ID** at the top of the
