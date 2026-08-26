@@ -106,7 +106,7 @@ function NavItem({ to, label, icon, badge }) {
 }
 
 export default function Layout({ children }) {
-  const { user, logout, isElectron } = useAuth();
+  const { user, logout, isElectron, isOnDevice } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -151,7 +151,9 @@ export default function Layout({ children }) {
         {nav.map(item => (
           <NavItem key={item.to} {...item} badge={item.to === '/transactions' ? needsReview : 0} />
         ))}
-        {!isElectron && user?.is_admin && <NavItem to="/users" label="Users" icon={icons.users} />}
+        {/* No second user exists on-device — the on-device backend answers
+            /users with the one local identity and can't create another. */}
+        {!isElectron && !isOnDevice && user?.is_admin && <NavItem to="/users" label="Users" icon={icons.users} />}
       </nav>
 
       <div className="p-3 border-t border-slate-100 dark:border-slate-700 space-y-0.5">
@@ -164,10 +166,12 @@ export default function Layout({ children }) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{user?.name}</div>
-            {!isElectron && <div className="text-xs text-slate-400 dark:text-slate-500 truncate">{user?.email}</div>}
+            {!isElectron && !isOnDevice && <div className="text-xs text-slate-400 dark:text-slate-500 truncate">{user?.email}</div>}
           </div>
         </Link>
-        {!isElectron && (
+        {/* Signing out of a device that never signed in would just strand
+            the user on a login page nothing can satisfy. */}
+        {!isElectron && !isOnDevice && (
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"

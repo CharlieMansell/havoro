@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
+import Onboarding, { hasSeenOnboarding } from './components/Onboarding';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
@@ -18,7 +20,11 @@ import Transfers from './pages/Transfers';
 import NotFound from './pages/NotFound';
 
 export default function App() {
-  const { user, needsSetup, isElectron } = useAuth();
+  const { user, needsSetup, isElectron, isOnDevice } = useAuth();
+
+  // On-device only, and only once. Read at mount rather than on every render
+  // so dismissing it doesn't depend on localStorage having been written yet.
+  const [showOnboarding, setShowOnboarding] = useState(() => isOnDevice && !hasSeenOnboarding());
 
   if (user === undefined || needsSetup === undefined) {
     return (
@@ -45,6 +51,7 @@ export default function App() {
 
   return (
     <Layout>
+      {showOnboarding && <Onboarding onClose={() => setShowOnboarding(false)} />}
       <Routes>
         <Route path="/"             element={<Navigate to="/dashboard" replace />} />
         <Route path="/login"        element={<Navigate to="/dashboard" replace />} />

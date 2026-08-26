@@ -6,6 +6,7 @@ import { useConfirm } from '../components/ConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
 import { Sk } from '../components/Skeleton';
 import CheckInModal from '../components/CheckInModal';
+import { resetOnboarding } from '../components/Onboarding';
 
 function formatBytes(b) {
   if (b < 1024) return `${b} B`;
@@ -894,15 +895,41 @@ function AboutPanel() {
   );
 }
 
+// The walkthrough is shown once and then never again, which is right for a
+// first run and wrong the moment someone wants to re-read the bit about
+// getting a file off their bank's website.
+function WalkthroughPanel({ toast }) {
+  return (
+    <div className="card flex items-center justify-between gap-4 flex-wrap">
+      <div className="min-w-0">
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Welcome walkthrough</h2>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+          Where your data lives, moving it from a computer, and getting statements onto your phone.
+        </p>
+      </div>
+      <button
+        className="btn-secondary text-xs shrink-0"
+        onClick={() => {
+          resetOnboarding();
+          toast.addToast('It will show next time the app opens');
+        }}
+      >
+        Show it again
+      </button>
+    </div>
+  );
+}
+
 export default function Settings() {
   const toast = useToast();
   const confirm = useConfirm();
-  const { user } = useAuth();
+  const { user, isOnDevice } = useAuth();
 
   return (
     <div className="space-y-6">
       <h1 className="font-serif text-xl font-semibold text-slate-800 dark:text-slate-100">Settings</h1>
       <AboutPanel />
+      {isOnDevice && <WalkthroughPanel toast={toast} />}
       <AppearancePanel />
       <CheckInPanel toast={toast} />
       <BackupPanel toast={toast} confirm={confirm} isAdmin={!!user?.is_admin} />

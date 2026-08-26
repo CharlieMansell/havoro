@@ -1,8 +1,62 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import { formatCents, formatDate } from '../lib/utils';
 
+// Getting a file from a bank's website into an app is obvious on a desktop and
+// genuinely not on a phone: iOS hands you a download rather than opening it,
+// and nothing in the interface says where it went. Collapsed by default so it
+// stops being clutter once you've done it once.
+function PhoneFileHelp() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="rounded-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+      >
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+          How do I get a statement onto my phone?
+        </span>
+        <svg
+          className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 text-sm text-slate-600 dark:text-slate-300 space-y-3 leading-relaxed">
+          <div>
+            <p className="font-medium text-slate-700 dark:text-slate-200">From Safari</p>
+            <p className="text-slate-500 dark:text-slate-400">
+              Log in to your bank and export a statement. When the download finishes, tap the
+              downloads icon in the address bar, then the file, then <em>Save to Files</em>.
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-slate-700 dark:text-slate-200">By email</p>
+            <p className="text-slate-500 dark:text-slate-400">
+              Export it on a computer and send it to yourself. Long-press the attachment on your
+              phone and choose <em>Save to Files</em>.
+            </p>
+          </div>
+          <p className="text-slate-500 dark:text-slate-400">
+            Then tap the box below to pick it from Files. Export a whole month or more at once —
+            overlapping dates are safe, because duplicates are detected and skipped.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Import() {
+  const { isOnDevice } = useAuth();
   const [profiles, setProfiles] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [profile, setProfile] = useState('');
@@ -125,6 +179,8 @@ export default function Import() {
               {txAccounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.institution || a.type})</option>)}
             </select>
           </div>
+
+          {isOnDevice && <PhoneFileHelp />}
 
           {/* File drop */}
           <div>
