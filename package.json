@@ -12,7 +12,7 @@
     "ios:sync": "npx cap sync ios"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.5.0",
+    "@capacitor/cli": "^8.5.1",
     "concurrently": "^10.0.3"
   },
   "overrides": {
